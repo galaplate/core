@@ -99,7 +99,7 @@ const dtoTemplate = `package dto
 
 import (
 	"github.com/gofiber/fiber/v2"
-	"{{.ModuleName}}/pkg/utils"
+	"github.com/galaplate/core/utils"
 )
 
 // {{.StructName}} - Generated on {{.Timestamp}}

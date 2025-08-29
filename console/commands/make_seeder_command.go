@@ -95,6 +95,7 @@ const seederTemplate = `package seeders
 
 import (
 	"gorm.io/gorm"
+    "github.com/galaplate/core/database/seeders"
 )
 
 // {{.StructName}} - Generated on {{.Timestamp}}
@@ -119,6 +120,6 @@ func (s {{.StructName}}) Seed(db *gorm.DB) error {
 }
 
 func init() {
-	registerSeeder("{{.SeederName}}", {{.StructName}}{})
+	seeders.RegisterSeeder("{{.SeederName}}", {{.StructName}}{})
 }
 `

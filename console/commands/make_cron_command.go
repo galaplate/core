@@ -115,6 +115,8 @@ type CronTemplate struct {
 
 const cronTemplate = `package scheduler
 
+import "github.com/galaplate/core/scheduler"
+
 // {{.StructName}} - Generated on {{.Timestamp}}
 type {{.StructName}} struct{}
 
@@ -145,6 +147,6 @@ func ({{.StructName}}) Handle() (string, func()) {
 }
 
 func init() {
-	RegisterScheduler("{{.CronName}}", {{.StructName}}{}.Handle)
+	scheduler.RegisterScheduler("{{.CronName}}", {{.StructName}}{}.Handle)
 }
 `

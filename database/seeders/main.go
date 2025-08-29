@@ -62,6 +62,6 @@ func NewDatabaseSeeder(selectedCSV string) *DatabaseSeeder {
 
 var SeederRegistry = map[string]Seeder{}
 
-func registerSeeder(name string, seeder Seeder) {
+func RegisterSeeder(name string, seeder Seeder) {
 	SeederRegistry[name] = seeder
 }

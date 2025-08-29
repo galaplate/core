@@ -159,7 +159,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"{{.ModuleName}}/pkg/queue"
+	"github.com/galaplate/core/queue"
 )
 
 // {{.StructName}} - Generated on {{.Timestamp}}
