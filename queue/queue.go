@@ -25,17 +25,30 @@ func New(bufferSize int) *Queue {
 
 func (q *Queue) Start(workerCount int) {
 	if database.Connect.Migrator().HasTable(&models.Job{}) {
-		for i := 0; i < workerCount; i++ {
+		for range workerCount {
 			go func() {
 				for {
 					var jobRecord models.Job
-					err := database.Connect.
+					start := time.Now()
+
+					result := database.Connect.
 						Where("state = ? AND available_at <= ?", models.JobPending, time.Now()).
 						Order("created_at ASC").
-						First(&jobRecord).Error
+						First(&jobRecord)
 
-					if err != nil {
+					if result.Error != nil {
 						time.Sleep(1 * time.Second)
+						continue
+					}
+
+					updateResult := database.Connect.Model(&jobRecord).
+						Where("id = ? AND state = ?", jobRecord.ID, models.JobPending).
+						Updates(models.Job{
+							State:     models.JobStarted,
+							StartedAt: &start,
+						})
+
+					if updateResult.RowsAffected == 0 {
 						continue
 					}
 
@@ -44,12 +57,6 @@ func (q *Queue) Start(workerCount int) {
 						failJob(&jobRecord, err)
 						continue
 					}
-
-					start := time.Now()
-					database.Connect.Model(&jobRecord).Updates(models.Job{
-						State:     models.JobStarted,
-						StartedAt: &start,
-					})
 
 					err = job.Handle(jobRecord.Payload)
 
