@@ -41,11 +41,14 @@ func (q *Queue) Start(workerCount int) {
 						continue
 					}
 
+					// Increment attempts when starting the job
+					jobRecord.Attempts++
 					updateResult := database.Connect.Model(&jobRecord).
 						Where("id = ? AND state = ?", jobRecord.ID, models.JobPending).
 						Updates(models.Job{
 							State:     models.JobStarted,
 							StartedAt: &start,
+							Attempts:  jobRecord.Attempts,
 						})
 
 					if updateResult.RowsAffected == 0 {
@@ -61,14 +64,12 @@ func (q *Queue) Start(workerCount int) {
 					err = job.Handle(jobRecord.Payload)
 
 					if err != nil {
-						jobRecord.Attempts++
 						if jobRecord.Attempts >= job.MaxAttempts() {
 							failJob(&jobRecord, err)
 						} else {
 							database.Connect.Model(&jobRecord).Updates(models.Job{
 								State:       models.JobPending,
 								ErrorMsg:    err.Error(),
-								Attempts:    jobRecord.Attempts,
 								AvailableAt: time.Now().Add(job.RetryAfter()),
 							})
 						}
