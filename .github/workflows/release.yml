@@ -12,51 +12,6 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: '1.22.1'
-        
-    - name: Cache Go modules
-      uses: actions/cache@v3
-      with:
-        path: ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
-          
-    - name: Download dependencies
-      run: go mod download
-      
-    - name: Run tests
-      run: go test ./...
-      
-    - name: Build for multiple platforms
-      run: |
-        # Linux amd64
-        GOOS=linux GOARCH=amd64 go build -o dist/galaplate-core-linux-amd64
-        
-        # Linux arm64
-        GOOS=linux GOARCH=arm64 go build -o dist/galaplate-core-linux-arm64
-        
-        # macOS amd64
-        GOOS=darwin GOARCH=amd64 go build -o dist/galaplate-core-darwin-amd64
-        
-        # macOS arm64
-        GOOS=darwin GOARCH=arm64 go build -o dist/galaplate-core-darwin-arm64
-        
-        # Windows amd64
-        GOOS=windows GOARCH=amd64 go build -o dist/galaplate-core-windows-amd64.exe
-        
-    - name: Create release archives
-      run: |
-        cd dist
-        tar -czf galaplate-core-linux-amd64.tar.gz galaplate-core-linux-amd64
-        tar -czf galaplate-core-linux-arm64.tar.gz galaplate-core-linux-arm64
-        tar -czf galaplate-core-darwin-amd64.tar.gz galaplate-core-darwin-amd64
-        tar -czf galaplate-core-darwin-arm64.tar.gz galaplate-core-darwin-arm64
-        zip galaplate-core-windows-amd64.zip galaplate-core-windows-amd64.exe
         
     - name: Generate changelog
       id: changelog
@@ -71,9 +26,6 @@ jobs:
     - name: Create GitHub release
       uses: softprops/action-gh-release@v1
       with:
-        files: |
-          dist/*.tar.gz
-          dist/*.zip
         body_path: release_notes.txt
         draft: false
         prerelease: false
