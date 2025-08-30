@@ -78,9 +78,12 @@ func (c *MakeSeederCommand) createSeeder(name string) error {
 		return fmt.Errorf("failed to write template: %v", err)
 	}
 
+	// Add import to main.go if not already present
+	c.HandleAutoImport("db/seeders", "seeder")
+
 	fmt.Printf("✅ Seeder created successfully: %s\n", filePath)
 	fmt.Printf("📝 Seeder struct: %s\n", structName)
-	fmt.Printf("🌱 Run with: make db-seeder-run %s\n", strings.ToLower(name))
+	fmt.Printf("🌱 Run with: go run main.go console db:seed %s\n", strings.ToLower(name))
 
 	return nil
 }

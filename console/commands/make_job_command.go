@@ -42,7 +42,7 @@ func (c *MakeJobCommand) askForJobName() string {
 }
 
 func (c *MakeJobCommand) createJob(name string) error {
-	jobDir := "./pkg/queue/jobs"
+	jobDir := "./pkg/jobs"
 
 	if err := os.MkdirAll(jobDir, 0755); err != nil {
 		return fmt.Errorf("failed to create jobs directory: %v", err)
@@ -89,8 +89,12 @@ func (c *MakeJobCommand) createJob(name string) error {
 		return fmt.Errorf("failed to write template: %v", err)
 	}
 
+	// Add import to main.go if not already present
+	c.HandleAutoImport("pkg/jobs", "job")
+
 	fmt.Printf("✅ Job created successfully: %s\n", filePath)
 	fmt.Printf("📝 Job struct: %s\n", structName)
+	fmt.Printf("🚀 Job will be auto-registered via init() function\n")
 
 	if err := c.createMigrationIfNeeded(dbConnection); err != nil {
 		fmt.Printf("⚠️  Warning: Could not create migration: %v\n", err)

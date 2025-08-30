@@ -99,9 +99,13 @@ func (c *MakeCronCommand) createCron(name, schedule string) error {
 		return fmt.Errorf("failed to write template: %v", err)
 	}
 
+	// Add import to main.go if not already present
+	c.HandleAutoImport("pkg/scheduler", "cron scheduler")
+
 	fmt.Printf("✅ Cron scheduler created successfully: %s\n", filePath)
 	fmt.Printf("📝 Cron struct: %s\n", structName)
 	fmt.Printf("⏰ Schedule: %s\n", schedule)
+	fmt.Printf("🚀 Scheduler will be auto-registered via init() function\n")
 
 	return nil
 }

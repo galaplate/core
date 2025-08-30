@@ -327,3 +327,73 @@ func (b *BaseCommand) PrintWarning(message string) {
 func (b *BaseCommand) PrintInfo(message string) {
 	fmt.Printf("ℹ️  %s\n", message)
 }
+
+// AddImportToMain adds an import path to main.go if not already present
+func (b *BaseCommand) AddImportToMain(importPath string) error {
+	mainPath := "./main.go"
+
+	// Get module name from go.mod
+	moduleName, err := b.GetModuleName()
+	if err != nil {
+		return fmt.Errorf("failed to get module name: %v", err)
+	}
+
+	// Read the main.go file
+	content, err := os.ReadFile(mainPath)
+	if err != nil {
+		return fmt.Errorf("failed to read main.go: %v", err)
+	}
+
+	contentStr := string(content)
+	fullImport := fmt.Sprintf(`_ "%s/%s"`, moduleName, importPath)
+
+	// Check if import already exists
+	if strings.Contains(contentStr, fullImport) {
+		return nil // Already imported
+	}
+
+	// Find the import block and add the import
+	lines := strings.Split(contentStr, "\n")
+	var newLines []string
+	importBlockFound := false
+	importAdded := false
+
+	for _, line := range lines {
+		if strings.Contains(line, "import (") {
+			importBlockFound = true
+			newLines = append(newLines, line)
+		} else if importBlockFound && strings.Contains(line, ")") && !importAdded {
+			// Add the import before closing the import block
+			newLines = append(newLines, "\t"+fullImport)
+			newLines = append(newLines, line)
+			importAdded = true
+		} else {
+			newLines = append(newLines, line)
+		}
+	}
+
+	if !importAdded {
+		return fmt.Errorf("could not find import block in main.go")
+	}
+
+	// Write back to main.go
+	newContent := strings.Join(newLines, "\n")
+	return os.WriteFile(mainPath, []byte(newContent), 0644)
+}
+
+// HandleAutoImport handles automatic import addition with error handling and user feedback
+func (b *BaseCommand) HandleAutoImport(importPath, itemType string) {
+	if err := b.AddImportToMain(importPath); err != nil {
+		fmt.Printf("⚠️  Warning: Could not auto-add import to main.go: %v\n", err)
+		// Get module name for manual instructions
+		if moduleName, err := b.GetModuleName(); err == nil {
+			fmt.Printf("📌 Please manually add this import to main.go:\n")
+			fmt.Printf("   _ \"%s/%s\"\n", moduleName, importPath)
+		} else {
+			fmt.Printf("📌 Please manually add this import to main.go:\n")
+			fmt.Printf("   _ \"<your-module-name>/%s\"\n", importPath)
+		}
+	} else {
+		fmt.Printf("📦 Auto-imported %s to main.go\n", itemType)
+	}
+}
