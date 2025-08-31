@@ -37,6 +37,7 @@ func (k *Kernel) registerDefaultCommands() {
 	k.Register(&commands.MakeJobCommand{})
 	k.Register(&commands.MakeCronCommand{})
 	k.Register(&commands.MakeSeederCommand{})
+	k.Register(&commands.MakeDomainCommand{})
 
 	// Database migration commands
 	k.Register(&commands.DbCreateCommand{})
