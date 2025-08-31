@@ -64,6 +64,7 @@ func (c *MakeDomainCommand) createDomain(name string, createAll bool) error {
 		filepath.Join(domainDir, "dto"),
 		filepath.Join(domainDir, "validators"),
 		filepath.Join(domainDir, "jobs"),
+		filepath.Join(domainDir, "routes"),
 	}
 
 	// Create directories
@@ -92,6 +93,9 @@ func (c *MakeDomainCommand) createDomain(name string, createAll bool) error {
 		if err := c.createValidator(domainDir, domainName, moduleName); err != nil {
 			return err
 		}
+		if err := c.createRoutes(domainDir, domainName, moduleName); err != nil {
+			return err
+		}
 	} else {
 		// Interactive mode - ask what to create
 		components := []string{
@@ -99,6 +103,7 @@ func (c *MakeDomainCommand) createDomain(name string, createAll bool) error {
 			"Handler",
 			"DTO",
 			"Validator",
+			"Routes",
 		}
 
 		for _, component := range components {
@@ -118,6 +123,10 @@ func (c *MakeDomainCommand) createDomain(name string, createAll bool) error {
 					}
 				case "Validator":
 					if err := c.createValidator(domainDir, domainName, moduleName); err != nil {
+						return err
+					}
+				case "Routes":
+					if err := c.createRoutes(domainDir, domainName, moduleName); err != nil {
 						return err
 					}
 				}
@@ -227,9 +236,10 @@ func (c *MakeDomainCommand) createValidator(domainDir, domainName, moduleName st
 	filePath := filepath.Join(domainDir, "validators", fileName)
 
 	templateData := DomainValidatorTemplate{
-		DomainName: domainName,
-		ModuleName: moduleName,
-		Timestamp:  time.Now().Format("2006-01-02 15:04:05"),
+		DomainName:  domainName,
+		DomainLower: strings.ToLower(domainName),
+		ModuleName:  moduleName,
+		Timestamp:   time.Now().Format("2006-01-02 15:04:05"),
 	}
 
 	tmpl, err := template.New("validator").Parse(validatorTemplate)
@@ -248,6 +258,36 @@ func (c *MakeDomainCommand) createValidator(domainDir, domainName, moduleName st
 	}
 
 	fmt.Printf("✅ Validator created: %s\n", filePath)
+	return nil
+}
+
+func (c *MakeDomainCommand) createRoutes(domainDir, domainName, moduleName string) error {
+	fileName := "routes.go"
+	filePath := filepath.Join(domainDir, "routes", fileName)
+
+	templateData := DomainRoutesTemplate{
+		DomainName:  domainName,
+		DomainLower: strings.ToLower(domainName),
+		ModuleName:  moduleName,
+		Timestamp:   time.Now().Format("2006-01-02 15:04:05"),
+	}
+
+	tmpl, err := template.New("routes").Parse(routesTemplate)
+	if err != nil {
+		return fmt.Errorf("failed to parse routes template: %v", err)
+	}
+
+	file, err := os.Create(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to create routes file: %v", err)
+	}
+	defer file.Close()
+
+	if err := tmpl.Execute(file, templateData); err != nil {
+		return fmt.Errorf("failed to write routes template: %v", err)
+	}
+
+	fmt.Printf("✅ Routes created: %s\n", filePath)
 	return nil
 }
 
@@ -272,9 +312,17 @@ type DomainDTOTemplate struct {
 }
 
 type DomainValidatorTemplate struct {
-	DomainName string
-	ModuleName string
-	Timestamp  string
+	DomainName  string
+	DomainLower string
+	ModuleName  string
+	Timestamp   string
+}
+
+type DomainRoutesTemplate struct {
+	DomainName  string
+	DomainLower string
+	ModuleName  string
+	Timestamp   string
 }
 
 // Templates
@@ -308,31 +356,42 @@ type {{.DomainName}} struct {
 // }
 `
 
-
-
 const handlerTemplate = `package handlers
 
 import (
 	"strconv"
 
 	"{{.ModuleName}}/domains/{{.DomainLower}}/dto"
-	"{{.ModuleName}}/domains/{{.DomainLower}}/services"
-	
+	"{{.ModuleName}}/domains/{{.DomainLower}}/models"
+	"{{.ModuleName}}/domains/{{.DomainLower}}/validators"
+
 	"github.com/galaplate/core/logger"
 	"github.com/gofiber/fiber/v2"
+	"gorm.io/gorm"
 )
 
 // {{.DomainName}}Handler handles HTTP requests for {{.DomainName}} domain
 type {{.DomainName}}Handler struct {
-	service services.{{.DomainName}}ServiceInterface
-	logger  *logger.LogRequest
+	db        *gorm.DB
+	validator *validators.{{.DomainName}}Validator
+	logger    *logger.LogRequest
 }
 
 // New{{.DomainName}}Handler creates a new {{.DomainName}} handler
-func New{{.DomainName}}Handler(service services.{{.DomainName}}ServiceInterface) *{{.DomainName}}Handler {
+func New{{.DomainName}}Handler(db *gorm.DB, validator *validators.{{.DomainName}}Validator) *{{.DomainName}}Handler {
 	return &{{.DomainName}}Handler{
-		service: service,
-		logger:  logger.NewLogRequestWithUUID(logger.WithField("handler", "{{.DomainName}}Handler"), "{{.DomainLower}}-handler"),
+		db:        db,
+		validator: validator,
+		logger:    logger.NewLogRequestWithUUID(logger.WithField("handler", "{{.DomainName}}Handler"), "{{.DomainLower}}-handler"),
+	}
+}
+
+// New{{.DomainName}}Handler creates a new {{.DomainName}} handler
+func New{{.DomainName}}Handler(db *gorm.DB, validator *validators.{{.DomainName}}Validator) *{{.DomainName}}Handler {
+	return &{{.DomainName}}Handler{
+		db:        db,
+		validator: validator,
+		logger:    logger.NewLogRequestWithUUID(logger.WithField("handler", "{{.DomainName}}Handler"), "{{.DomainLower}}-handler"),
 	}
 }
 
@@ -346,17 +405,35 @@ func (h *{{.DomainName}}Handler) Create(c *fiber.Ctx) error {
 		})
 	}
 
-	result, err := h.service.Create(&req)
-	if err != nil {
-		h.logger.Logger.Error(map[string]any{"error": err.Error(), "action": "create_{{.DomainLower}}_handler"})
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+	// Validate request
+	if err := h.validator.ValidateCreate(&req); err != nil {
+		h.logger.Logger.Error(map[string]any{"error": err.Error(), "action": "validate_create_{{.DomainLower}}"})
+		return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{
 			"error": err.Error(),
 		})
 	}
 
+	// Create model instance
+	model := &models.{{.DomainName}}{
+		// TODO: Map fields from req to model
+		// Example:
+		// Name: req.Name,
+		// Description: req.Description,
+	}
+
+	// Save to database
+	if err := h.db.Create(model).Error; err != nil {
+		h.logger.Logger.Error(map[string]any{"error": err.Error(), "action": "create_{{.DomainLower}}"})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to create {{.DomainLower}}",
+		})
+	}
+
+	h.logger.Logger.Info(map[string]any{"{{.DomainLower}}_id": model.ID, "action": "{{.DomainLower}}_created"})
+
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
 		"message": "{{.DomainName}} created successfully",
-		"data":    result,
+		"data":    model,
 	})
 }
 
@@ -487,7 +564,7 @@ type {{.DomainName}}Response struct {
 	ID        uint      ` + "`" + `json:"id"` + "`" + `
 	CreatedAt time.Time ` + "`" + `json:"created_at"` + "`" + `
 	UpdatedAt time.Time ` + "`" + `json:"updated_at"` + "`" + `
-	
+
 	// Add your response fields here
 	// Example:
 	// Name        string ` + "`" + `json:"name"` + "`" + `
@@ -499,7 +576,7 @@ type {{.DomainName}}Response struct {
 type List{{.DomainName}}Request struct {
 	Page  int ` + "`" + `json:"page" query:"page" validate:"min=1"` + "`" + `
 	Limit int ` + "`" + `json:"limit" query:"limit" validate:"min=1,max=100"` + "`" + `
-	
+
 	// Add your filter fields here
 	// Example:
 	// Search string ` + "`" + `json:"search" query:"search"` + "`" + `
@@ -520,19 +597,19 @@ const validatorTemplate = `package validators
 
 import (
 	"{{.ModuleName}}/domains/{{.DomainLower}}/dto"
-	
+
 	"github.com/galaplate/core/utils"
 )
 
 // {{.DomainName}}Validator handles validation for {{.DomainName}} domain
 type {{.DomainName}}Validator struct {
-	validator *utils.Validator
+	validator *utils.XValidator
 }
 
 // New{{.DomainName}}Validator creates a new {{.DomainName}} validator
 func New{{.DomainName}}Validator() *{{.DomainName}}Validator {
 	return &{{.DomainName}}Validator{
-		validator: &utils.Validator{},
+		validator: &utils.XValidator{},
 	}
 }
 
@@ -541,15 +618,154 @@ func (v *{{.DomainName}}Validator) ValidateCreate(req *dto.Create{{.DomainName}}
 	return v.validator.Validate(req)
 }
 
-// ValidateUpdate validates Update{{.DomainName}}Request  
+// ValidateUpdate validates Update{{.DomainName}}Request
 func (v *{{.DomainName}}Validator) ValidateUpdate(req *dto.Update{{.DomainName}}Request) error {
 	return v.validator.Validate(req)
 }
 
 // Custom validation methods can be added here
 // Example:
-// func (v *{{.DomainName}}Validator) ValidateBusinessRule({{.DomainLower}} *entities.{{.DomainName}}) error {
+// func (v *{{.DomainName}}Validator) ValidateBusinessRule({{.DomainLower}} *models.{{.DomainName}}) error {
 //     // Add custom business logic validation
 //     return nil
 // }
+`
+
+const routesTemplate = `package routes
+
+import (
+	"{{.ModuleName}}/domains/{{.DomainLower}}/models"
+
+	"github.com/galaplate/core/database"
+	"github.com/gofiber/fiber/v2"
+	"gorm.io/gorm"
+)
+
+// SetupRoutes sets up all routes for the {{.DomainName}} domain
+// Call this function in your main router: routes.Setup{{.DomainName}}Routes(app)
+func SetupRoutes(app *fiber.App) {
+	// Use global database connection
+	db := database.Connect
+
+	// Route group for {{.DomainName}} domain
+	{{.DomainLower}}Group := app.Group("/{{.DomainLower}}s")
+
+	// {{.DomainName}} CRUD routes - customize as needed
+	{{.DomainLower}}Group.Post("/", func(c *fiber.Ctx) error {
+		var model models.{{.DomainName}}
+		if err := c.BodyParser(&model); err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Invalid request body",
+			})
+		}
+
+		if err := db.Create(&model).Error; err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Failed to create {{.DomainLower}}",
+			})
+		}
+
+		return c.Status(fiber.StatusCreated).JSON(fiber.Map{
+			"message": "{{.DomainName}} created successfully",
+			"data":    model,
+		})
+	})
+
+	{{.DomainLower}}Group.Get("/", func(c *fiber.Ctx) error {
+		var models []models.{{.DomainName}}
+		if err := db.Find(&models).Error; err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Failed to get {{.DomainLower}}s",
+			})
+		}
+
+		return c.JSON(fiber.Map{
+			"data": models,
+		})
+	})
+
+	{{.DomainLower}}Group.Get("/:id", func(c *fiber.Ctx) error {
+		id := c.Params("id")
+		var model models.{{.DomainName}}
+
+		if err := db.First(&model, id).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+					"error": "{{.DomainName}} not found",
+				})
+			}
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Failed to get {{.DomainLower}}",
+			})
+		}
+
+		return c.JSON(fiber.Map{
+			"data": model,
+		})
+	})
+
+	{{.DomainLower}}Group.Put("/:id", func(c *fiber.Ctx) error {
+		id := c.Params("id")
+		var model models.{{.DomainName}}
+
+		if err := db.First(&model, id).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+					"error": "{{.DomainName}} not found",
+				})
+			}
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Failed to get {{.DomainLower}}",
+			})
+		}
+
+		if err := c.BodyParser(&model); err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Invalid request body",
+			})
+		}
+
+		if err := db.Save(&model).Error; err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Failed to update {{.DomainLower}}",
+			})
+		}
+
+		return c.JSON(fiber.Map{
+			"message": "{{.DomainName}} updated successfully",
+			"data":    model,
+		})
+	})
+
+	{{.DomainLower}}Group.Delete("/:id", func(c *fiber.Ctx) error {
+		id := c.Params("id")
+		var model models.{{.DomainName}}
+
+		if err := db.First(&model, id).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+					"error": "{{.DomainName}} not found",
+				})
+			}
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Failed to get {{.DomainLower}}",
+			})
+		}
+
+		if err := db.Delete(&model, id).Error; err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Failed to delete {{.DomainLower}}",
+			})
+		}
+
+		return c.JSON(fiber.Map{
+			"message": "{{.DomainName}} deleted successfully",
+		})
+	})
+
+	// Add custom routes here
+	// Example:
+	// {{.DomainLower}}Group.Post("/:id/activate", activateHandler)
+	// {{.DomainLower}}Group.Get("/search", searchHandler)
+}
 `
