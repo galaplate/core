@@ -45,10 +45,31 @@ func (pm *PolicyManager) EvaluatePolicy(ctx context.Context, policyName string, 
 	return policy.Evaluate(ctx, policyCtx)
 }
 
+// EvaluatePolicyDirect evaluates a single policy using the policy struct directly
+func (pm *PolicyManager) EvaluatePolicyDirect(ctx context.Context, policy Policy, policyCtx *PolicyContext) PolicyResult {
+	return policy.Evaluate(ctx, policyCtx)
+}
+
 // EvaluatePolicies evaluates multiple policies (all must pass)
 func (pm *PolicyManager) EvaluatePolicies(ctx context.Context, policyNames []string, policyCtx *PolicyContext) PolicyResult {
 	for _, policyName := range policyNames {
 		result := pm.EvaluatePolicy(ctx, policyName, policyCtx)
+		if !result.Allowed {
+			return result
+		}
+	}
+
+	return PolicyResult{
+		Allowed: true,
+		Message: "All policies passed",
+		Code:    fiber.StatusOK,
+	}
+}
+
+// EvaluatePoliciesDirect evaluates multiple policies directly using policy structs (all must pass)
+func (pm *PolicyManager) EvaluatePoliciesDirect(ctx context.Context, policies []Policy, policyCtx *PolicyContext) PolicyResult {
+	for _, policy := range policies {
+		result := pm.EvaluatePolicyDirect(ctx, policy, policyCtx)
 		if !result.Allowed {
 			return result
 		}
@@ -91,10 +112,45 @@ func (pm *PolicyManager) PolicyMiddleware(policyNames ...string) fiber.Handler {
 	}
 }
 
+// PolicyMiddlewareDirect creates a Fiber middleware that enforces policies using policy structs directly
+func (pm *PolicyManager) PolicyMiddlewareDirect(policies ...Policy) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		policyCtx := &PolicyContext{
+			Request:  c,
+			Resource: c.Route().Path,
+			Action:   c.Method(),
+			Data:     make(map[string]any),
+		}
+
+		// Try to get user from context (set by auth middleware)
+		if user := c.Locals("user"); user != nil {
+			policyCtx.User = user
+		}
+
+		result := pm.EvaluatePoliciesDirect(ctx, policies, policyCtx)
+		if !result.Allowed {
+			return c.Status(result.Code).JSON(fiber.Map{
+				"success": false,
+				"message": result.Message,
+			})
+		}
+
+		return c.Next()
+	}
+}
+
 // Global policy manager instance
 var GlobalPolicyManager = NewPolicyManager()
 
 // WithPolicies creates policy middleware using the global manager
 func WithPolicies(policyNames ...string) fiber.Handler {
 	return GlobalPolicyManager.PolicyMiddleware(policyNames...)
+}
+
+// WithPoliciesDirect creates policy middleware using the global manager with policy structs directly
+func WithPoliciesDirect(policies ...Policy) fiber.Handler {
+	return GlobalPolicyManager.PolicyMiddlewareDirect(policies...)
 }
