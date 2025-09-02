@@ -11,7 +11,8 @@ import (
 )
 
 // BaseCommand provides common functionality for all commands
-type BaseCommand struct{}
+type BaseCommand struct {
+}
 
 // askText prompts for text input with optional default value
 func (b *BaseCommand) AskText(prompt string, defaultValue string) string {
@@ -396,4 +397,15 @@ func (b *BaseCommand) HandleAutoImport(importPath, itemType string) {
 	} else {
 		fmt.Printf("📦 Auto-imported %s to main.go\n", itemType)
 	}
+}
+
+// create template for showing usage
+func (b *BaseCommand) ShowUsage(commandName, description string, usageExamples []string) {
+	fmt.Printf("📋 %s\n", commandName)
+	fmt.Printf("   %s\n\n", description)
+	fmt.Println("Usage:")
+	for _, example := range usageExamples {
+		fmt.Printf("  %s\n", example)
+	}
+	fmt.Println()
 }

@@ -47,11 +47,14 @@ func (k *Kernel) registerDefaultCommands() {
 	k.Register(&commands.DbFreshCommand{})
 	k.Register(&commands.DbSeedCommand{})
 
+	// Policy management command
+	k.Register(commands.NewPolicyCommand())
+
 	// Register user-defined commands
 	k.RegisterCommands()
 
 	// Register ListCommand last so it includes all other commands
-	commandsInterface := make(map[string]interface{})
+	commandsInterface := make(map[string]any)
 	for signature, command := range k.commands {
 		commandsInterface[signature] = command
 	}
