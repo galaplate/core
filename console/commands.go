@@ -11,6 +11,28 @@ func (k *Kernel) RegisterCommands() {
 	// Interactive demo command
 	k.Register(&commands.InteractiveCommand{})
 
+	// Database commands
+	k.Register(&commands.DbCreateCommand{})
+	k.Register(&commands.DbUpCommand{})
+	k.Register(&commands.DbDownCommand{})
+	k.Register(&commands.DbStatusCommand{})
+	k.Register(&commands.DbResetCommand{})
+	k.Register(&commands.DbFreshCommand{})
+	k.Register(&commands.DbSeedCommand{})
+	k.Register(&commands.DbDumpCommand{})
+
+	// Make commands
+	k.Register(&commands.MakeCommand{})
+	k.Register(&commands.MakeModelCommand{})
+	k.Register(&commands.MakeSeederCommand{})
+	k.Register(&commands.MakeJobCommand{})
+	k.Register(&commands.MakeDtoCommand{})
+	k.Register(&commands.MakeCronCommand{})
+
+	// Other commands
+	k.Register(&commands.ListCommand{})
+	k.Register(&commands.PolicyCommand{})
+
 	// Register your custom commands here
 	// Example: k.Register(&commands.YourCustomCommand{})
 }
