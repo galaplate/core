@@ -99,7 +99,7 @@ const dtoTemplate = `package dto
 
 import (
 	"github.com/gofiber/fiber/v2"
-	"github.com/galaplate/core/utils"
+	"github.com/galaplate/core/supports"
 )
 
 // {{.StructName}} - Generated on {{.Timestamp}}
@@ -111,7 +111,7 @@ type {{.StructName}} struct {
 }
 
 func (s *{{.StructName}}) Validate(c *fiber.Ctx) (u *{{.StructName}}, err error) {
-	myValidator := &utils.XValidator{}
+	myValidator := &supports.XValidator{}
 	if err := c.BodyParser(s); err != nil {
 		return nil, err
 	}

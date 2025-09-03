@@ -10,7 +10,7 @@ import (
 	"github.com/galaplate/core/logger"
 	"github.com/galaplate/core/queue"
 	"github.com/galaplate/core/scheduler"
-	"github.com/galaplate/core/utils"
+	"github.com/galaplate/core/supports"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/template/html/v2"
 	"gorm.io/gorm"
@@ -84,7 +84,7 @@ func App(cfg *AppConfig) *fiber.App {
 	app := fiber.New(fiber.Config{
 		Views: engine,
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
-			var errResponse utils.GlobalErrorHandlerResp
+			var errResponse supports.GlobalErrorHandlerResp
 			if json.Unmarshal([]byte(err.Error()), &errResponse) != nil {
 				var e *fiber.Error
 				code := fiber.StatusInternalServerError
