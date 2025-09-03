@@ -89,7 +89,8 @@ func (c *MakeCommand) createCommand(name string) error {
 	fmt.Printf("✅ Command created successfully: %s\n", filePath)
 	fmt.Printf("📝 Remember to register your command in console/commands.go\n")
 	fmt.Printf("\nExample registration:\n")
-	fmt.Printf("k.Register(&commands.%s{})\n", className)
+	fmt.Printf("kernel.Register(&commands.%s{})\n", className)
+	fmt.Printf("In console/kernel.go RegisterCommands function\n")
 
 	return nil
 }
@@ -117,8 +118,8 @@ const commandTemplate = `package commands
 
 import (
 	"fmt"
-	"{{.ModuleName}}/db"
-	"{{.ModuleName}}/logs"
+	// "{{.ModuleName}}/db"
+    "github.com/galaplate/core/logger"
 )
 
 // {{.ClassName}} - Generated on {{.Timestamp}}
