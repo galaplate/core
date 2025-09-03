@@ -15,6 +15,7 @@ type (
 	XValidator struct{}
 
 	GlobalErrorHandlerResp struct {
+        Success bool              `json:"success"`
 		Status  int               `json:"status"`
 		Message string            `json:"message"`
 		Errors  map[string]string `json:"errors"`
@@ -22,6 +23,15 @@ type (
 )
 
 var validate *validator.Validate
+
+func (g *GlobalErrorHandlerResp) Error() string {
+	errorJSON, err := json.Marshal(g)
+    if err != nil {
+        return fmt.Sprintf("Status: %d, Message: %s, Errors: %v", g.Status, g.Message, g.Errors)
+    }
+
+    return fmt.Sprintf("%s", string(errorJSON))
+}
 
 func init() {
 	validate = validator.New()
@@ -60,7 +70,7 @@ func getFieldJSONName(structType reflect.Type, fieldName string) string {
 		structType = structType.Elem()
 	}
 
-	for i := 0; i < structType.NumField(); i++ {
+	for i := range structType.NumField() {
 		field := structType.Field(i)
 		if field.Name == fieldName {
 			return getJSONFieldName(field)
@@ -70,7 +80,7 @@ func getFieldJSONName(structType reflect.Type, fieldName string) string {
 	return ""
 }
 
-func (v XValidator) Validate(data interface{}) error {
+func (v XValidator) Validate(data any) error {
 	errorMessages := map[string]string{}
 	var errorMessage string
 
@@ -108,7 +118,7 @@ func (v XValidator) WithMessage(data GlobalErrorHandlerResp) error {
 	}
 
 	return &fiber.Error{
-		Code:    fiber.StatusUnprocessableEntity,
+		Code:    data.Status,
 		Message: string(errorJSON),
 	}
 }
