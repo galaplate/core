@@ -74,9 +74,9 @@ func App(cfg *AppConfig) *fiber.App {
 		cfg = DefaultConfig()
 	}
 
-	screet := config.Get("APP_SCREET")
+	screet := config.Get("APP_SECRET")
 	if screet == "" {
-		logger.Fatal("You must generate the screet key first")
+        panic("You must generate the screet key first")
 	}
 
 	engine := html.New(cfg.TemplateDir, cfg.TemplateExt)
@@ -146,7 +146,7 @@ func Init() {
 }
 
 func InitWithConfig(dbConfig *DatabaseConfig) {
-	screet := config.Get("APP_SCREET")
+	screet := config.Get("APP_SECRET")
 	if screet == "" {
 		logger.Fatal("You must generate the screet key first")
 	}
