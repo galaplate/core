@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"text/template"
 	"time"
 )
 
@@ -63,27 +62,15 @@ func (c *MakeCommand) createCommand(name string) error {
 	className := formatClassName(name)
 	signatureName := strings.ToLower(name)
 
-	templateData := CommandTemplate{
+	// Use internal stub template
+	if err := c.GenerateFromStub("commands/command.go.stub", filePath, CommandTemplate{
 		ClassName:   className,
 		Signature:   signatureName,
 		Description: fmt.Sprintf("Command description for %s", name),
 		Timestamp:   time.Now().Format("2006-01-02 15:04:05"),
 		ModuleName:  moduleName,
-	}
-
-	tmpl, err := template.New("command").Parse(commandTemplate)
-	if err != nil {
-		return fmt.Errorf("failed to parse template: %v", err)
-	}
-
-	file, err := os.Create(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to create file: %v", err)
-	}
-	defer file.Close()
-
-	if err := tmpl.Execute(file, templateData); err != nil {
-		return fmt.Errorf("failed to write template: %v", err)
+	}); err != nil {
+		return err
 	}
 
 	fmt.Printf("✅ Command created successfully: %s\n", filePath)
@@ -114,51 +101,3 @@ type CommandTemplate struct {
 	ModuleName  string
 }
 
-const commandTemplate = `package commands
-
-import (
-	"fmt"
-	// "{{.ModuleName}}/db"
-    "github.com/galaplate/core/logger"
-)
-
-// {{.ClassName}} - Generated on {{.Timestamp}}
-// Add your custom command logic here
-type {{.ClassName}} struct{}
-
-func (c *{{.ClassName}}) GetSignature() string {
-	return "{{.Signature}}"
-}
-
-func (c *{{.ClassName}}) GetDescription() string {
-	return "{{.Description}}"
-}
-
-func (c *{{.ClassName}}) Execute(args []string) error {
-	logger := logger.NewLogRequestWithUUID(logger.WithField("console", "{{.ClassName}}@Execute"), "console-command")
-
-	fmt.Println("🚀 Executing {{.Signature}} command...")
-
-	// Database connection is available via database.Connect
-	// Logger is available for structured logging
-
-	// TODO: Add your command logic here
-
-	// Example database query:
-	// var count int64
-	// if err := database.Connect.Table("users").Count(&count).Error; err != nil {
-	//     logger.Logger.Error(map[string]any{"error": err.Error(), "action": "count_users_failed"})
-	//     return fmt.Errorf("failed to count users: %v", err)
-	// }
-
-	// Example with arguments:
-	// if len(args) > 0 {
-	//     fmt.Printf("First argument: %s\n", args[0])
-	// }
-
-	fmt.Println("✅ {{.Signature}} command completed successfully")
-	logger.Logger.Info(map[string]any{"action": "command_completed", "command": "{{.Signature}}"})
-
-	return nil
-}
-`

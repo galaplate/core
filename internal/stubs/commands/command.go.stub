@@ -1,0 +1,33 @@
+package commands
+
+import (
+	"fmt"
+	// "{{.ModuleName}}/db"
+    "github.com/galaplate/core/logger"
+)
+
+// {{.ClassName}} - Generated on {{.Timestamp}}
+// Add your custom command logic here
+type {{.ClassName}} struct{}
+
+func (c *{{.ClassName}}) GetSignature() string {
+	return "{{.Signature}}"
+}
+
+func (c *{{.ClassName}}) GetDescription() string {
+	return "{{.Description}}"
+}
+
+func (c *{{.ClassName}}) Execute(args []string) error {
+	logger.Info(fmt.Sprintf("Executing {{.ClassName}} command"))
+
+	// TODO: Add your command logic here
+	// Examples:
+	// - Database operations
+	// - API calls
+	// - File processing
+	// - Business logic
+
+	logger.Info("{{.ClassName}} command completed successfully")
+	return nil
+}

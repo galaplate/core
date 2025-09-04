@@ -1,0 +1,54 @@
+package policies
+
+import (
+	"context"
+
+	"github.com/galaplate/core/policies"
+	"github.com/gofiber/fiber/v2"
+)
+
+// {{.StructName}}Policy implements {{.PolicyName}} policy - Generated on {{.Timestamp}}
+type {{.StructName}}Policy struct {
+	// Add your policy configuration fields here
+}
+
+func New{{.StructName}}Policy() *{{.StructName}}Policy {
+	return &{{.StructName}}Policy{
+		// Initialize your policy configuration here
+	}
+}
+
+func (p *{{.StructName}}Policy) Name() string {
+	return "{{.PolicyName}}"
+}
+
+func (p *{{.StructName}}Policy) Evaluate(ctx context.Context, policyCtx *policies.PolicyContext) policies.PolicyResult {
+	// TODO: Implement your policy logic here
+
+	// Example policy logic:
+	// Check user authentication
+	if policyCtx.User == nil {
+		return policies.PolicyResult{
+			Allowed: false,
+			Message: "Authentication required for {{.PolicyName}} policy",
+			Code:    fiber.StatusUnauthorized,
+		}
+	}
+
+	// Add your custom policy checks here
+	// For example:
+	// - Check user permissions
+	// - Validate request data
+	// - Check business rules
+	// - etc.
+
+	return policies.PolicyResult{
+		Allowed: true,
+		Message: "{{.PolicyName}} policy check passed",
+		Code:    fiber.StatusOK,
+	}
+}
+
+func init() {
+    policies.GlobalPolicyManager.RegisterPolicy(New{{.StructName}}Policy())
+}

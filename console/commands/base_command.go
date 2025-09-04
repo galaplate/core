@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+	"text/template"
 )
 
 // BaseCommand provides common functionality for all commands
@@ -408,4 +410,109 @@ func (b *BaseCommand) ShowUsage(commandName, description string, usageExamples [
 		fmt.Printf("  %s\n", example)
 	}
 	fmt.Println()
+}
+
+// generateFromStub generates a file from an internal stub template
+func (b *BaseCommand) GenerateFromStub(stubPath, targetPath string, data interface{}) error {
+	// Get the stub content from embedded stubs or file system
+	stubDir := "./internal/stubs"
+	fullStubPath := filepath.Join(stubDir, stubPath)
+
+	// Try to read from core internal stubs if local doesn't exist
+	if _, err := os.Stat(fullStubPath); os.IsNotExist(err) {
+		// Try to find core stubs
+		coreStubPath := ""
+		possiblePaths := []string{
+			"../core/internal/stubs",
+			"../../core/internal/stubs",
+			"core/internal/stubs",
+		}
+
+		for _, path := range possiblePaths {
+			testPath := filepath.Join(path, stubPath)
+			if _, err := os.Stat(testPath); err == nil {
+				coreStubPath = testPath
+				break
+			}
+		}
+
+		if coreStubPath == "" {
+			return fmt.Errorf("stub template not found: %s", stubPath)
+		}
+		fullStubPath = coreStubPath
+	}
+
+	stubContent, err := os.ReadFile(fullStubPath)
+	if err != nil {
+		return fmt.Errorf("failed to read stub template: %v", err)
+	}
+
+	tmpl, err := template.New("stub").Parse(string(stubContent))
+	if err != nil {
+		return fmt.Errorf("failed to parse stub template: %v", err)
+	}
+
+	// Create target directory if it doesn't exist
+	if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+		return fmt.Errorf("failed to create target directory: %v", err)
+	}
+
+	file, err := os.Create(targetPath)
+	if err != nil {
+		return fmt.Errorf("failed to create target file: %v", err)
+	}
+	defer file.Close()
+
+	if err := tmpl.Execute(file, data); err != nil {
+		return fmt.Errorf("failed to execute template: %v", err)
+	}
+
+	return nil
+}
+
+// CopyStubToTarget copies a stub file to target location without template processing
+func (b *BaseCommand) CopyStubToTarget(stubPath, targetPath string) error {
+	// Get the stub content from embedded stubs or file system
+	stubDir := "./internal/stubs"
+	fullStubPath := filepath.Join(stubDir, stubPath)
+
+	// Try to read from core internal stubs if local doesn't exist
+	if _, err := os.Stat(fullStubPath); os.IsNotExist(err) {
+		// Try to find core stubs
+		coreStubPath := ""
+		possiblePaths := []string{
+			"../core/internal/stubs",
+			"../../core/internal/stubs",
+			"core/internal/stubs",
+		}
+
+		for _, path := range possiblePaths {
+			testPath := filepath.Join(path, stubPath)
+			if _, err := os.Stat(testPath); err == nil {
+				coreStubPath = testPath
+				break
+			}
+		}
+
+		if coreStubPath == "" {
+			return fmt.Errorf("stub file not found: %s", stubPath)
+		}
+		fullStubPath = coreStubPath
+	}
+
+	stubContent, err := os.ReadFile(fullStubPath)
+	if err != nil {
+		return fmt.Errorf("failed to read stub file: %v", err)
+	}
+
+	// Create target directory if it doesn't exist
+	if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+		return fmt.Errorf("failed to create target directory: %v", err)
+	}
+
+	if err := os.WriteFile(targetPath, stubContent, 0644); err != nil {
+		return fmt.Errorf("failed to write target file: %v", err)
+	}
+
+	return nil
 }

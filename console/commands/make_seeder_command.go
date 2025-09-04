@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"text/template"
 	"time"
 )
 
@@ -57,25 +56,13 @@ func (c *MakeSeederCommand) createSeeder(name string) error {
 
 	structName := c.FormatStructName(name)
 
-	templateData := SeederTemplate{
+	// Use internal stub template
+	if err := c.GenerateFromStub("seeders/seeder.go.stub", filePath, SeederTemplate{
 		StructName: structName,
 		SeederName: strings.ToLower(name),
 		Timestamp:  time.Now().Format("2006-01-02 15:04:05"),
-	}
-
-	tmpl, err := template.New("seeder").Parse(seederTemplate)
-	if err != nil {
-		return fmt.Errorf("failed to parse template: %v", err)
-	}
-
-	file, err := os.Create(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to create file: %v", err)
-	}
-	defer file.Close()
-
-	if err := tmpl.Execute(file, templateData); err != nil {
-		return fmt.Errorf("failed to write template: %v", err)
+	}); err != nil {
+		return err
 	}
 
 	// Add import to main.go if not already present
@@ -94,35 +81,3 @@ type SeederTemplate struct {
 	Timestamp  string
 }
 
-const seederTemplate = `package seeders
-
-import (
-	"gorm.io/gorm"
-    "github.com/galaplate/core/database/seeders"
-)
-
-// {{.StructName}} - Generated on {{.Timestamp}}
-type {{.StructName}} struct{}
-
-func (s {{.StructName}}) Seed(db *gorm.DB) error {
-	// TODO: Add your seeding logic here
-
-	// Example: Create sample users
-	// users := []models.User{
-	//     {Name: "John Doe", Email: "john@example.com"},
-	//     {Name: "Jane Smith", Email: "jane@example.com"},
-	// }
-	//
-	// for _, user := range users {
-	//     if err := db.FirstOrCreate(&user, models.User{Email: user.Email}).Error; err != nil {
-	//         return err
-	//     }
-	// }
-
-	return nil
-}
-
-func init() {
-	seeders.RegisterSeeder("{{.SeederName}}", {{.StructName}}{})
-}
-`

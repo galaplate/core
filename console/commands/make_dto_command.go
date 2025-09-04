@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"text/template"
 	"time"
 )
 
@@ -62,25 +61,13 @@ func (c *MakeDtoCommand) createDto(name string) error {
 
 	structName := c.FormatStructName(name)
 
-	templateData := DtoTemplate{
+	// Use internal stub template
+	if err := c.GenerateFromStub("dto/dto.go.stub", filePath, DtoTemplate{
 		StructName: structName,
 		ModuleName: moduleName,
 		Timestamp:  time.Now().Format("2006-01-02 15:04:05"),
-	}
-
-	tmpl, err := template.New("dto").Parse(dtoTemplate)
-	if err != nil {
-		return fmt.Errorf("failed to parse template: %v", err)
-	}
-
-	file, err := os.Create(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to create file: %v", err)
-	}
-	defer file.Close()
-
-	if err := tmpl.Execute(file, templateData); err != nil {
-		return fmt.Errorf("failed to write template: %v", err)
+	}); err != nil {
+		return err
 	}
 
 	fmt.Printf("✅ DTO created successfully: %s\n", filePath)
@@ -94,35 +81,3 @@ type DtoTemplate struct {
 	ModuleName string
 	Timestamp  string
 }
-
-const dtoTemplate = `package dto
-
-import (
-	"github.com/gofiber/fiber/v2"
-	"github.com/galaplate/core/supports"
-)
-
-// {{.StructName}} - Generated on {{.Timestamp}}
-type {{.StructName}} struct {
-	// Add your DTO fields here
-	// Example:
-	// Name  string ` + "`" + `json:"name" validate:"required"` + "`" + `
-	// Email string ` + "`" + `json:"email" validate:"required,email"` + "`" + `
-}
-
-func (s *{{.StructName}}) Validate(c *fiber.Ctx) (u *{{.StructName}}, err error) {
-	myValidator := &supports.XValidator{}
-	if err := c.BodyParser(s); err != nil {
-		return nil, err
-	}
-
-	if err := myValidator.Validate(s); err != nil {
-		return nil, &fiber.Error{
-			Code:    fiber.ErrUnprocessableEntity.Code,
-			Message: err.Error(),
-		}
-	}
-
-	return s, nil
-}
-`

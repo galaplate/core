@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"text/template"
 	"time"
 )
 
@@ -57,24 +56,12 @@ func (c *MakeModelCommand) createModel(name string) error {
 
 	structName := c.FormatStructName(name)
 
-	templateData := ModelTemplate{
+	// Use internal stub template
+	if err := c.GenerateFromStub("models/model.go.stub", filePath, ModelTemplate{
 		StructName: structName,
 		Timestamp:  time.Now().Format("2006-01-02 15:04:05"),
-	}
-
-	tmpl, err := template.New("model").Parse(modelTemplate)
-	if err != nil {
-		return fmt.Errorf("failed to parse template: %v", err)
-	}
-
-	file, err := os.Create(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to create file: %v", err)
-	}
-	defer file.Close()
-
-	if err := tmpl.Execute(file, templateData); err != nil {
-		return fmt.Errorf("failed to write template: %v", err)
+	}); err != nil {
+		return err
 	}
 
 	fmt.Printf("✅ Model created successfully: %s\n", filePath)
@@ -87,22 +74,3 @@ type ModelTemplate struct {
 	StructName string
 	Timestamp  string
 }
-
-const modelTemplate = `package models
-
-import (
-	"time"
-
-	"gorm.io/gorm"
-)
-
-// {{.StructName}} - Generated on {{.Timestamp}}
-type {{.StructName}} struct {
-	ID        uint           ` + "`" + `gorm:"primaryKey" json:"id"` + "`" + `
-	CreatedAt time.Time      ` + "`" + `json:"created_at"` + "`" + `
-	UpdatedAt time.Time      ` + "`" + `json:"updated_at"` + "`" + `
-	DeletedAt gorm.DeletedAt ` + "`" + `gorm:"index" json:"deleted_at"` + "`" + `
-
-	// Add your model fields here
-}
-`

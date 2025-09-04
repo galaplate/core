@@ -29,6 +29,10 @@ func (k *Kernel) RegisterCommands() {
 	k.Register(&commands.MakeDtoCommand{})
 	k.Register(&commands.MakeCronCommand{})
 
+	// Template commands
+	k.Register(&commands.TemplateCommand{})
+	k.Register(&commands.TemplateGenerateCommand{})
+
 	// Other commands
 	k.Register(&commands.ListCommand{})
 	k.Register(&commands.PolicyCommand{})

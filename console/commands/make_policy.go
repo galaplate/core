@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 )
 
 // PolicyCommand handles policy-related operations
@@ -59,8 +60,6 @@ func (c *PolicyCommand) createPolicy(policyName string) error {
 
 	c.PrintInfo(fmt.Sprintf("Creating new policy: %s", policyName))
 
-	// Create policy file
-	policyContent := c.generatePolicyTemplate(policyName, structName)
 	policyPath := fmt.Sprintf("./pkg/policies/%s_policy.go", policyName)
 
 	// Create directory if it doesn't exist
@@ -69,7 +68,12 @@ func (c *PolicyCommand) createPolicy(policyName string) error {
 		return err
 	}
 
-	if err := os.WriteFile(policyPath, []byte(policyContent), 0644); err != nil {
+	// Use internal stub template
+	if err := c.GenerateFromStub("policies/policy.go.stub", policyPath, PolicyTemplate{
+		StructName: structName,
+		PolicyName: policyName,
+		Timestamp:  time.Now().Format("2006-01-02 15:04:05"),
+	}); err != nil {
 		c.PrintError(fmt.Sprintf("Failed to create policy file: %v", err))
 		return err
 	}
@@ -91,61 +95,8 @@ func (c *PolicyCommand) createPolicy(policyName string) error {
 	return nil
 }
 
-func (c *PolicyCommand) generatePolicyTemplate(policyName, structName string) string {
-	return fmt.Sprintf(`package policies
-
-import (
-	"context"
-
-	"github.com/galaplate/core/policies"
-	"github.com/gofiber/fiber/v2"
-)
-
-// %sPolicy implements %s policy
-type %sPolicy struct {
-	// Add your policy configuration fields here
-}
-
-func New%sPolicy() *%sPolicy {
-	return &%sPolicy{
-		// Initialize your policy configuration here
-	}
-}
-
-func (p *%sPolicy) Name() string {
-	return "%s"
-}
-
-func (p *%sPolicy) Evaluate(ctx context.Context, policyCtx *policies.PolicyContext) policies.PolicyResult {
-	// TODO: Implement your policy logic here
-
-	// Example policy logic:
-	// Check user authentication
-	if policyCtx.User == nil {
-		return policies.PolicyResult{
-			Allowed: false,
-			Message: "Authentication required for %s policy",
-			Code:    fiber.StatusUnauthorized,
-		}
-	}
-
-	// Add your custom policy checks here
-	// For example:
-	// - Check user permissions
-	// - Validate request data
-	// - Check business rules
-	// - etc.
-
-	return policies.PolicyResult{
-		Allowed: true,
-		Message: "%s policy check passed",
-		Code:    fiber.StatusOK,
-	}
-}
-
-func init() {
-    policies.GlobalPolicyManager.RegisterPolicy(New%sPolicy())
-}
-
-`, structName, policyName, structName, structName, structName, structName, structName, policyName, structName, policyName, structName, structName)
+type PolicyTemplate struct {
+	StructName string
+	PolicyName string
+	Timestamp  string
 }

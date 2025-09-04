@@ -1,0 +1,43 @@
+package jobs
+
+import (
+	"encoding/json"
+	"time"
+
+	"github.com/galaplate/core/queue"
+)
+
+// {{.StructName}} - Generated on {{.Timestamp}}
+type {{.StructName}} struct {
+	// Add your job payload fields here
+	// Example:
+	// UserID int `json:"user_id"`
+}
+
+func (j {{.StructName}}) MaxAttempts() int {
+	return 3
+}
+
+func (j {{.StructName}}) RetryAfter() time.Duration {
+	return 2 * time.Minute
+}
+
+func ({{.StructName}}) Type() string {
+	return "{{.JobName}}"
+}
+
+func (j {{.StructName}}) Handle(payload json.RawMessage) error {
+	// Unmarshal payload into struct
+	// var data {{.StructName}}
+	// if err := json.Unmarshal(payload, &data); err != nil {
+	//     return err
+	// }
+
+	// TODO: Add your job logic here
+
+	return nil
+}
+
+func init() {
+	queue.RegisterJob({{.StructName}}{})
+}

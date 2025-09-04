@@ -1,0 +1,29 @@
+package seeders
+
+import (
+	"github.com/galaplate/core/database"
+)
+
+// {{.StructName}} - Generated on {{.Timestamp}}
+type {{.StructName}} struct{}
+
+func ({{.StructName}}) Run() error {
+	// TODO: Add your seeding logic here
+	
+	// Example: Create default records
+	// users := []models.User{
+	//     {Name: "John Doe", Email: "john@example.com"},
+	//     {Name: "Jane Doe", Email: "jane@example.com"},
+	// }
+	// 
+	// for _, user := range users {
+	//     database.Connect.Create(&user)
+	// }
+
+	return nil
+}
+
+func init() {
+	// Auto-register seeder
+	// seeders.Register("{{.SeederName}}", {{.StructName}}{})
+}

@@ -1,0 +1,27 @@
+package dto
+
+import (
+	"github.com/gofiber/fiber/v2"
+	"github.com/galaplate/core/supports"
+)
+
+// {{.StructName}} - Generated on {{.Timestamp}}
+type {{.StructName}} struct {
+	// Add your DTO fields here
+	// Example:
+	// Name  string `json:"name" validate:"required"`
+	// Email string `json:"email" validate:"required,email"`
+}
+
+func (s *{{.StructName}}) Validate(c *fiber.Ctx) (u *{{.StructName}}, err error) {
+	myValidator := &supports.XValidator{}
+	if err := c.BodyParser(s); err != nil {
+		return nil, err
+	}
+
+	if err := myValidator.Validate(s); err != nil {
+		return nil, err
+	}
+
+	return s, nil
+}

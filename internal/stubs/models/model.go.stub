@@ -1,0 +1,17 @@
+package models
+
+import (
+	"time"
+)
+
+// {{.StructName}} - Generated on {{.Timestamp}}
+type {{.StructName}} struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	
+	// Add your model fields here
+	// Example:
+	// Name  string `gorm:"size:255;not null" json:"name"`
+	// Email string `gorm:"size:255;uniqueIndex" json:"email"`
+}

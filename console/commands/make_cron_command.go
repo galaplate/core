@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"text/template"
 	"time"
 )
 
@@ -77,26 +76,14 @@ func (c *MakeCronCommand) createCron(name, schedule string) error {
 
 	structName := c.FormatStructName(name)
 
-	templateData := CronTemplate{
+	// Use internal stub template
+	if err := c.GenerateFromStub("scheduler/cron.go.stub", filePath, CronTemplate{
 		StructName: structName,
 		CronName:   strings.ToLower(name),
 		Schedule:   schedule,
 		Timestamp:  time.Now().Format("2006-01-02 15:04:05"),
-	}
-
-	tmpl, err := template.New("cron").Parse(cronTemplate)
-	if err != nil {
-		return fmt.Errorf("failed to parse template: %v", err)
-	}
-
-	file, err := os.Create(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to create file: %v", err)
-	}
-	defer file.Close()
-
-	if err := tmpl.Execute(file, templateData); err != nil {
-		return fmt.Errorf("failed to write template: %v", err)
+	}); err != nil {
+		return err
 	}
 
 	// Add import to main.go if not already present
@@ -116,41 +103,3 @@ type CronTemplate struct {
 	Schedule   string
 	Timestamp  string
 }
-
-const cronTemplate = `package scheduler
-
-import "github.com/galaplate/core/scheduler"
-
-// {{.StructName}} - Generated on {{.Timestamp}}
-type {{.StructName}} struct{}
-
-func ({{.StructName}}) Handle() (string, func()) {
-	// Cron expression examples:
-	// "@every 5s"     - every 5 seconds
-	// "@every 1m"     - every minute
-	// "@every 1h"     - every hour
-	// "@daily"        - once a day (midnight)
-	// "@weekly"       - once a week (Sunday midnight)
-	// "@monthly"      - once a month (first day of month, midnight)
-	// "0 30 * * * *"  - every 30 seconds
-	// "0 0 12 * * *"  - every day at noon
-	// "0 15 10 * * *" - 10:15 AM every day
-
-	return "{{.Schedule}}", func() {
-		// TODO: Add your scheduled task logic here
-
-		// Example: Log a message
-		// logger.Info("{{.StructName}} scheduler executed")
-
-		// Example: Database operation
-		// database.Connect.Model(&models.User{}).Where("active = ?", true).Count(&count)
-
-		// Example: Queue a job
-		// queue.Dispatch(jobs.SomeJob{UserID: 1})
-	}
-}
-
-func init() {
-	scheduler.RegisterScheduler("{{.CronName}}", {{.StructName}}{}.Handle)
-}
-`
