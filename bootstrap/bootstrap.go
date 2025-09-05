@@ -37,6 +37,7 @@ type DatabaseConfig struct {
 type AppConfig struct {
 	TemplateDir         string
 	TemplateExt         string
+	AppSecret           string
 	SetupRoutes         func(*fiber.App)
 	StartBackgroundJobs bool
 	QueueSize           int
@@ -74,9 +75,12 @@ func App(cfg *AppConfig) *fiber.App {
 		cfg = DefaultConfig()
 	}
 
-	screet := config.Get("APP_SECRET")
+	screet := cfg.AppSecret
 	if screet == "" {
-        panic("You must generate the screet key first")
+		screet = config.Get("APP_SECRET")
+		if screet == "" {
+			panic("You must generate the screet key first")
+		}
 	}
 
 	engine := html.New(cfg.TemplateDir, cfg.TemplateExt)
@@ -141,12 +145,15 @@ func App(cfg *AppConfig) *fiber.App {
 	return app
 }
 
-func Init() {
-	InitWithConfig(nil)
-}
+func Init(cfg *AppConfig) {
+    dbConfig := cfg.DatabaseConfig
+	var screet string
+	if cfg.AppSecret != "" {
+		screet = cfg.AppSecret
+	} else {
+		screet = config.Get("APP_SECRET")
+	}
 
-func InitWithConfig(dbConfig *DatabaseConfig) {
-	screet := config.Get("APP_SECRET")
 	if screet == "" {
 		logger.Fatal("You must generate the screet key first")
 	}
