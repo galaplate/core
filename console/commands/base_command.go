@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"text/template"
@@ -414,9 +415,12 @@ func (b *BaseCommand) ShowUsage(commandName, description string, usageExamples [
 
 // generateFromStub generates a file from an internal stub template
 func (b *BaseCommand) GenerateFromStub(stubPath, targetPath string, data interface{}) error {
-	// Get the stub content from embedded stubs or file system
-	stubDir := "./internal/stubs"
+	// Find the project root by looking for go.mod
+	_, currentFile, _, _ := runtime.Caller(0)
+	projectRoot := filepath.Dir(filepath.Dir(currentFile))
+	stubDir := projectRoot + "../../internal/stubs"
 	fullStubPath := filepath.Join(stubDir, stubPath)
+
 
 	// Try to read from core internal stubs if local doesn't exist
 	if _, err := os.Stat(fullStubPath); os.IsNotExist(err) {
