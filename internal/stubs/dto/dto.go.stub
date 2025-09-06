@@ -14,12 +14,7 @@ type {{.StructName}} struct {
 }
 
 func (s *{{.StructName}}) Validate(c *fiber.Ctx) (u *{{.StructName}}, err error) {
-	myValidator := &supports.XValidator{}
-	if err := c.BodyParser(s); err != nil {
-		return nil, err
-	}
-
-	if err := myValidator.Validate(s); err != nil {
+    if err = supports.NewValidator(c).Validate(s); err != nil {
 		return nil, err
 	}
 

@@ -12,7 +12,9 @@ import (
 )
 
 type (
-	XValidator struct{}
+	XValidator struct {
+		c *fiber.Ctx
+	}
 
 	GlobalErrorHandlerResp struct {
 		Success bool              `json:"success"`
@@ -23,6 +25,12 @@ type (
 )
 
 var validate *validator.Validate
+
+func NewValidator(c *fiber.Ctx) *XValidator {
+	return &XValidator{
+		c: c,
+	}
+}
 
 func (g *GlobalErrorHandlerResp) Error() string {
 	errorJSON, err := json.Marshal(g)
@@ -80,12 +88,18 @@ func getFieldJSONName(structType reflect.Type, fieldName string) string {
 	return ""
 }
 
-func (v XValidator) Validate(data any) error {
+func (v XValidator) Validate(data any) (err error) {
+	if v.c == nil {
+        return fmt.Errorf("fiber context is nil")
+	}
+
+	err = v.c.BodyParser(data)
+
 	errorMessages := map[string]string{}
 	var errorMessage string
 
 	errs := validate.Struct(data)
-	if errs != nil {
+	if errs != nil || err != nil {
 		for index, err := range errs.(validator.ValidationErrors) {
 			jsonFieldName := getFieldJSONName(reflect.TypeOf(data), err.Field())
 			errorMessages[jsonFieldName] = fmt.Sprintf("Field validation for '%s' failed on the '%s' tag", jsonFieldName, err.Tag())

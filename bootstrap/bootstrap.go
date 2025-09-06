@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/galaplate/core/database"
@@ -92,7 +93,7 @@ func App(cfg *AppConfig) *fiber.App {
 			if json.Unmarshal([]byte(err.Error()), &errResponse) != nil {
 				var e *fiber.Error
 				code := fiber.StatusInternalServerError
-				message := "Internal Server Error"
+				message := fmt.Sprintf("Internal Server Error: %v", err.Error())
 				if errors.As(err, &e) {
 					code = e.Code
 					message = e.Message
