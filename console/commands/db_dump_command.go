@@ -33,9 +33,22 @@ func (c *DbDumpCommand) Execute(args []string) error {
 	dbUsername := os.Getenv("DB_USERNAME")
 	dbPassword := os.Getenv("DB_PASSWORD")
 
-	if dbConnection == "" || dbHost == "" || dbPort == "" || dbDatabase == "" {
-		c.PrintError("Missing database configuration in .env file")
-		return fmt.Errorf("missing database configuration")
+	if dbConnection == "" {
+		c.PrintError("Missing DB_CONNECTION in .env file")
+		return fmt.Errorf("missing database connection type")
+	}
+
+	// SQLite validation
+	if dbConnection == "sqlite" {
+		if dbDatabase == "" {
+			dbDatabase = "database.sqlite"
+		}
+	} else {
+		// MySQL/PostgreSQL validation
+		if dbHost == "" || dbPort == "" || dbDatabase == "" {
+			c.PrintError("Missing database configuration in .env file")
+			return fmt.Errorf("missing database configuration")
+		}
 	}
 
 	// Create dumps directory if it doesn't exist
@@ -61,6 +74,11 @@ func (c *DbDumpCommand) Execute(args []string) error {
 
 	var cmd *exec.Cmd
 	switch dbConnection {
+	case "sqlite":
+		if err := c.checkCommand("sqlite3"); err != nil {
+			return err
+		}
+		cmd = exec.Command("sqlite3", dbDatabase, ".dump")
 	case "mysql":
 		if err := c.checkCommand("mysqldump"); err != nil {
 			return err
@@ -92,7 +110,7 @@ func (c *DbDumpCommand) Execute(args []string) error {
 			dbDatabase,
 		)
 	default:
-		c.PrintError(fmt.Sprintf("Unsupported database driver: %s", dbConnection))
+		c.PrintError(fmt.Sprintf("Unsupported database driver: %s (supported: sqlite, mysql, postgres)", dbConnection))
 		return fmt.Errorf("unsupported database driver: %s", dbConnection)
 	}
 
@@ -123,6 +141,11 @@ func (c *DbDumpCommand) checkCommand(command string) error {
 	if err != nil {
 		c.PrintError(fmt.Sprintf("%s command not found", command))
 		switch command {
+		case "sqlite3":
+			c.PrintInfo("Install SQLite3 command-line tool:")
+			c.PrintInfo("  macOS: brew install sqlite3")
+			c.PrintInfo("  Ubuntu/Debian: sudo apt-get install sqlite3")
+			c.PrintInfo("  CentOS/RHEL: sudo yum install sqlite")
 		case "mysqldump":
 			c.PrintInfo("Install MySQL client tools to use mysqldump")
 		case "pg_dump":

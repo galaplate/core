@@ -267,19 +267,26 @@ func (b *BaseCommand) BuildDatabaseURL() (string, error) {
 	dbUsername := os.Getenv("DB_USERNAME")
 	dbPassword := os.Getenv("DB_PASSWORD")
 
-	if dbConnection == "" || dbHost == "" || dbPort == "" || dbDatabase == "" {
-		return "", fmt.Errorf("missing database configuration in .env file")
-	}
-
 	switch dbConnection {
+	case "sqlite":
+		if dbDatabase == "" {
+			dbDatabase = "database.sqlite"
+		}
+		return fmt.Sprintf("sqlite:%s", dbDatabase), nil
 	case "mysql":
+		if dbHost == "" || dbPort == "" || dbDatabase == "" {
+			return "", fmt.Errorf("missing MySQL database configuration in .env file")
+		}
 		return fmt.Sprintf("mysql://%s:%s@%s:%s/%s?parseTime=true",
 			dbUsername, dbPassword, dbHost, dbPort, dbDatabase), nil
 	case "postgres", "postgresql":
+		if dbHost == "" || dbPort == "" || dbDatabase == "" {
+			return "", fmt.Errorf("missing PostgreSQL database configuration in .env file")
+		}
 		return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
 			dbUsername, dbPassword, dbHost, dbPort, dbDatabase), nil
 	default:
-		return "", fmt.Errorf("unsupported database driver: %s", dbConnection)
+		return "", fmt.Errorf("unsupported database driver: %s (supported: sqlite, mysql, postgres)", dbConnection)
 	}
 }
 
@@ -414,13 +421,12 @@ func (b *BaseCommand) ShowUsage(commandName, description string, usageExamples [
 }
 
 // generateFromStub generates a file from an internal stub template
-func (b *BaseCommand) GenerateFromStub(stubPath, targetPath string, data interface{}) error {
+func (b *BaseCommand) GenerateFromStub(stubPath, targetPath string, data any) error {
 	// Find the project root by looking for go.mod
 	_, currentFile, _, _ := runtime.Caller(0)
 	projectRoot := filepath.Dir(filepath.Dir(currentFile))
 	stubDir := projectRoot + "../../internal/stubs"
 	fullStubPath := filepath.Join(stubDir, stubPath)
-
 
 	// Try to read from core internal stubs if local doesn't exist
 	if _, err := os.Stat(fullStubPath); os.IsNotExist(err) {

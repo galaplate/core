@@ -15,7 +15,7 @@ type (
 	XValidator struct{}
 
 	GlobalErrorHandlerResp struct {
-        Success bool              `json:"success"`
+		Success bool              `json:"success"`
 		Status  int               `json:"status"`
 		Message string            `json:"message"`
 		Errors  map[string]string `json:"errors"`
@@ -26,11 +26,11 @@ var validate *validator.Validate
 
 func (g *GlobalErrorHandlerResp) Error() string {
 	errorJSON, err := json.Marshal(g)
-    if err != nil {
-        return fmt.Sprintf("Status: %d, Message: %s, Errors: %v", g.Status, g.Message, g.Errors)
-    }
+	if err != nil {
+		return fmt.Sprintf("Status: %d, Message: %s, Errors: %v", g.Status, g.Message, g.Errors)
+	}
 
-    return fmt.Sprintf("%s", string(errorJSON))
+	return fmt.Sprintf("%s", string(errorJSON))
 }
 
 func init() {

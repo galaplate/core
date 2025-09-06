@@ -80,4 +80,3 @@ type SeederTemplate struct {
 	SeederName string
 	Timestamp  string
 }
-

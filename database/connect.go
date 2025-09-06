@@ -10,6 +10,7 @@ import (
 	config "github.com/galaplate/core/env"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
+	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -129,6 +130,17 @@ func ConnectWithConfig(cfg *Config) {
 
 		db, err = gorm.Open(
 			mysql.Open(dsn),
+			gormConfig,
+		)
+
+	case "sqlite":
+		dsn = database
+		if dsn == "" {
+			dsn = "db/database.sqlite"
+		}
+
+		db, err = gorm.Open(
+			sqlite.Open(dsn),
 			gormConfig,
 		)
 	default:

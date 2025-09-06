@@ -146,7 +146,7 @@ func App(cfg *AppConfig) *fiber.App {
 }
 
 func Init(cfg *AppConfig) {
-    dbConfig := cfg.DatabaseConfig
+	dbConfig := cfg.DatabaseConfig
 	var screet string
 	if cfg.AppSecret != "" {
 		screet = cfg.AppSecret
@@ -155,7 +155,7 @@ func Init(cfg *AppConfig) {
 	}
 
 	if screet == "" {
-		logger.Fatal("You must generate the screet key first")
+		panic("You must generate the screet key first")
 	}
 
 	// Connect DB for console commands

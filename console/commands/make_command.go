@@ -70,7 +70,7 @@ func (c *MakeCommand) createCommand(name string) error {
 		Timestamp:   time.Now().Format("2006-01-02 15:04:05"),
 		ModuleName:  moduleName,
 	}); err != nil {
-        panic(err)
+		panic(err)
 	}
 
 	fmt.Printf("✅ Command created successfully: %s\n", filePath)
