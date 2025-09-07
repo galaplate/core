@@ -8,6 +8,11 @@ import (
 )
 
 func Get(key string) string {
+	value := os.Getenv(key)
+	if value != "" {
+		return value
+	}
+
 	err := godotenv.Load(".env")
 	if err != nil {
 		fmt.Print("Error loading .env file")
