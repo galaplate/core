@@ -260,12 +260,12 @@ func (b *BaseCommand) BuildDatabaseURL() (string, error) {
 		return "", err
 	}
 
-	dbConnection := os.Getenv("DB_CONNECTION")
-	dbHost := os.Getenv("DB_HOST")
-	dbPort := os.Getenv("DB_PORT")
-	dbDatabase := os.Getenv("DB_DATABASE")
-	dbUsername := os.Getenv("DB_USERNAME")
-	dbPassword := os.Getenv("DB_PASSWORD")
+	dbConnection := strings.Trim(os.Getenv("DB_CONNECTION"), `"`)
+	dbHost := strings.Trim(os.Getenv("DB_HOST"), `"`)
+	dbPort := strings.Trim(os.Getenv("DB_PORT"), `"`)
+	dbDatabase := strings.Trim(os.Getenv("DB_DATABASE"), `"`)
+	dbUsername := strings.Trim(os.Getenv("DB_USERNAME"), `"`)
+	dbPassword := strings.Trim(os.Getenv("DB_PASSWORD"), `"`)
 
 	switch dbConnection {
 	case "sqlite":
