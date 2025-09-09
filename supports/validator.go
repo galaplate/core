@@ -49,6 +49,10 @@ func init() {
 	}
 }
 
+func (XValidator) RegisterValidation(tag string, fn validator.Func) error {
+    return validate.RegisterValidation(tag, fn)
+}
+
 func fieldConfirmation(fl validator.FieldLevel) bool {
 	fieldValue := fl.Field().String()
 	parent := fl.Top().Elem()
