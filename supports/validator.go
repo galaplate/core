@@ -50,7 +50,7 @@ func init() {
 }
 
 func (XValidator) RegisterValidation(tag string, fn validator.Func) error {
-    return validate.RegisterValidation(tag, fn)
+	return validate.RegisterValidation(tag, fn)
 }
 
 func fieldConfirmation(fl validator.FieldLevel) bool {
@@ -92,19 +92,46 @@ func getFieldJSONName(structType reflect.Type, fieldName string) string {
 	return ""
 }
 
+func isZeroStruct(v any) bool {
+	t := reflect.TypeOf(v)
+	// handle pointer
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+	return t.Kind() == reflect.Struct && t.NumField() == 0
+}
+
 func (v XValidator) Validate(data any) (err error) {
 	if v.c == nil {
-        return fmt.Errorf("fiber context is nil")
+		return fmt.Errorf("fiber context is nil")
+	}
+
+	if isZeroStruct(data) {
+		return nil
+	}
+	body := v.c.Body()
+	if len(body) == 0 {
+		data = &struct{}{}
+		v.c.Request().SetBody([]byte("{}"))
+		if v.c.Get("Content-Type") == "" {
+			v.c.Request().Header.Set("Content-Type", "application/json")
+		}
 	}
 
 	err = v.c.BodyParser(data)
-
+	if err != nil {
+		return fmt.Errorf("body parsing error: %v", err)
+	}
 	errorMessages := map[string]string{}
 	var errorMessage string
 
 	errs := validate.Struct(data)
-	if errs != nil || err != nil {
-		for index, err := range errs.(validator.ValidationErrors) {
+	if errs != nil {
+		errors, ok := errs.(validator.ValidationErrors)
+		if !ok {
+			return fmt.Errorf("validation error: %v", errs)
+		}
+		for index, err := range errors {
 			jsonFieldName := getFieldJSONName(reflect.TypeOf(data), err.Field())
 			errorMessages[jsonFieldName] = fmt.Sprintf("Field validation for '%s' failed on the '%s' tag", jsonFieldName, err.Tag())
 			if index == 0 {
