@@ -1,21 +1,22 @@
 package seeders
 
 import (
-	"github.com/galaplate/core/database"
+	"github.com/galaplate/core/database/seeders"
+    "gorm.io/gorm"
 )
 
 // {{.StructName}} - Generated on {{.Timestamp}}
 type {{.StructName}} struct{}
 
-func ({{.StructName}}) Run() error {
+func ({{.StructName}}) Seed(db *gorm.DB) error {
 	// TODO: Add your seeding logic here
-	
+
 	// Example: Create default records
 	// users := []models.User{
 	//     {Name: "John Doe", Email: "john@example.com"},
 	//     {Name: "Jane Doe", Email: "jane@example.com"},
 	// }
-	// 
+	//
 	// for _, user := range users {
 	//     database.Connect.Create(&user)
 	// }
@@ -25,5 +26,5 @@ func ({{.StructName}}) Run() error {
 
 func init() {
 	// Auto-register seeder
-	// seeders.Register("{{.SeederName}}", {{.StructName}}{})
+	seeders.RegisterSeeder("{{.SeederName}}", {{.StructName}}{})
 }
