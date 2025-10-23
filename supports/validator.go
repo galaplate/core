@@ -13,9 +13,9 @@ import (
 
 type (
 	XValidator struct {
-		c *fiber.Ctx
+		c               *fiber.Ctx
+		CustomValidator *[]func(string, validator.Func) error
 	}
-
 	GlobalErrorHandlerResp struct {
 		Success bool              `json:"success"`
 		Status  int               `json:"status"`
@@ -23,6 +23,8 @@ type (
 		Errors  map[string]string `json:"errors"`
 	}
 )
+
+var ValidatorRegistry = map[string]validator.Func{}
 
 var validate *validator.Validate
 
@@ -42,15 +44,15 @@ func (g *GlobalErrorHandlerResp) Error() string {
 }
 
 func init() {
-	validate = validator.New()
+	validate = validator.New(validator.WithRequiredStructEnabled())
 	err := validate.RegisterValidation("confirmation", fieldConfirmation)
 	if err != nil {
 		log.Panic(err)
 	}
 }
 
-func (XValidator) RegisterValidation(tag string, fn validator.Func) error {
-	return validate.RegisterValidation(tag, fn)
+func RegisterValidation(tag string, fn validator.Func) {
+	ValidatorRegistry[tag] = fn
 }
 
 func fieldConfirmation(fl validator.FieldLevel) bool {
@@ -101,7 +103,14 @@ func isZeroStruct(v any) bool {
 	return t.Kind() == reflect.Struct && t.NumField() == 0
 }
 
-func (v XValidator) Validate(data any) (err error) {
+func (v *XValidator) Validate(data any) (err error) {
+	for tag, validatorFunc := range ValidatorRegistry {
+		err := validate.RegisterValidation(tag, validatorFunc)
+		if err != nil {
+			log.Panic(err)
+		}
+	}
+
 	if v.c == nil {
 		return fmt.Errorf("fiber context is nil")
 	}
@@ -118,7 +127,7 @@ func (v XValidator) Validate(data any) (err error) {
 		}
 	}
 
-	err = v.c.BodyParser(data)
+	err = v.c.BodyParser(&data)
 	if err != nil {
 		return fmt.Errorf("body parsing error: %v", err)
 	}
