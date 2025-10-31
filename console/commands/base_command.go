@@ -230,7 +230,12 @@ func (b *BaseCommand) GetDbConnection() (string, error) {
 
 // LoadEnvVariables loads environment variables from .env file
 func (b *BaseCommand) LoadEnvVariables() error {
-	file, err := os.Open(".env")
+	isTesting := os.Getenv("APP_ENV") == "testing"
+	envFile := ".env"
+	if isTesting {
+		envFile = ".env.testing"
+	}
+	file, err := os.Open(envFile)
 	if err != nil {
 		return fmt.Errorf(".env file not found: %v", err)
 	}
