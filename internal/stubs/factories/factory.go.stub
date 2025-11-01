@@ -1,0 +1,87 @@
+package factories
+
+import (
+	"{{.ModuleName}}/database/factory"
+	"{{.ModuleName}}/pkg/models"
+	"{{.ModuleName}}/pkg/utils"
+	"time"
+)
+
+// {{.FactoryName}} - Generated on {{.Timestamp}}
+type {{.FactoryName}} struct {
+	*factory.BaseFactory[models.{{.ModelName}}]
+}
+
+// {{.FactoryConstructor}} constructor
+func {{.FactoryConstructor}}() *{{.FactoryName}} {
+	password, err := new(utils.Bcrypt).HashPassword("password")
+	if err != nil {
+		panic(err.Error())
+	}
+
+	return &{{.FactoryName}}{
+		BaseFactory: factory.NewBaseFactory(func(seq int64) models.{{.ModelName}} {
+			return models.{{.ModelName}}{
+				// Add your default model fields here
+				// Example:
+				// Username: "admin",
+				// Email:    "admin@gmail.com",
+				// Password: password,
+				// Status:   true,
+				CreatedAt: time.Now(),
+				UpdatedAt: time.Now(),
+			}
+		}),
+	}
+}
+
+// Method: WithUsername (example - customize based on your model)
+func (f *{{.FactoryName}}) WithUsername(username string) *{{.FactoryName}} {
+	oldBuilder := f.Builder
+	f.Builder = func(seq int64) models.{{.ModelName}} {
+		u := oldBuilder(seq)
+		// u.Username = username // Uncomment and modify based on your model
+		return u
+	}
+	return f
+}
+
+// Method: WithEmail (example - customize based on your model)
+func (f *{{.FactoryName}}) WithEmail(email string) *{{.FactoryName}} {
+	oldBuilder := f.Builder
+	f.Builder = func(seq int64) models.{{.ModelName}} {
+		u := oldBuilder(seq)
+		// u.Email = email // Uncomment and modify based on your model
+		return u
+	}
+	return f
+}
+
+// Method: WithPassword (example - customize based on your model)
+func (f *{{.FactoryName}}) WithPassword(password string) *{{.FactoryName}} {
+	oldBuilder := f.Builder
+	f.Builder = func(seq int64) models.{{.ModelName}} {
+		hashedPassword, err := new(utils.Bcrypt).HashPassword(password)
+		if err != nil {
+			panic(err.Error())
+		}
+		u := oldBuilder(seq)
+		// u.Password = hashedPassword // Uncomment and modify based on your model
+		return u
+	}
+	return f
+}
+
+// Add your custom factory methods here
+// Example:
+// func (f *{{.FactoryName}}) AssignRole(roleName, kodeSatker string, permissionKeys []string) (*models.{{.ModelName}}, error) {
+//     // Create user using builder
+//     user := f.Builder(1) // Use sequence 1 for single creation
+//
+//     // Save user to database
+//     f.Create(&user)
+//
+//     // Add your custom logic here
+//
+//     return &user, nil
+// }

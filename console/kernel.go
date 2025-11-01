@@ -51,13 +51,6 @@ func (k *Kernel) registerDefaultCommands() {
 
 	// Policy management command
 	k.Register(commands.NewPolicyCommand())
-
-	// Register ListCommand last so it includes all other commands
-	commandsInterface := make(map[string]any)
-	for signature, command := range k.commands {
-		commandsInterface[signature] = command
-	}
-	k.Register(&commands.ListCommand{Commands: commandsInterface})
 }
 
 func (k *Kernel) Register(command Command) {
@@ -101,7 +94,7 @@ func (k *Kernel) showHelp() error {
 
 	fmt.Println()
 	fmt.Println("Examples:")
-	fmt.Println("  go run main.go console list")
+	fmt.Println("  go run main.go console")
 	fmt.Println("  go run main.go console make:command MyCustomCommand")
 
 	return nil
