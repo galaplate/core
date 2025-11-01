@@ -37,8 +37,9 @@ func (k *Kernel) registerDefaultCommands() {
 	k.Register(&commands.MakeJobCommand{})
 	k.Register(&commands.MakeCronCommand{})
 	k.Register(&commands.MakeSeederCommand{})
+	k.Register(&commands.MakeFactoryCommand{})
 
-	// Database migration commands
+	// Database commands
 	k.Register(&commands.DbCreateCommand{})
 	k.Register(&commands.DbUpCommand{})
 	k.Register(&commands.DbDownCommand{})
@@ -46,12 +47,10 @@ func (k *Kernel) registerDefaultCommands() {
 	k.Register(&commands.DbResetCommand{})
 	k.Register(&commands.DbFreshCommand{})
 	k.Register(&commands.DbSeedCommand{})
+	k.Register(&commands.DbDumpCommand{})
 
 	// Policy management command
 	k.Register(commands.NewPolicyCommand())
-
-	// Register user-defined commands
-	k.RegisterCommands()
 
 	// Register ListCommand last so it includes all other commands
 	commandsInterface := make(map[string]any)
