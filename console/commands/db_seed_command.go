@@ -35,7 +35,7 @@ func (c *DbSeedCommand) Execute(args []string) error {
 
 	c.PrintInfo("Running database seeders...")
 
-	database.ConnectDB()
+	database.New()
 
 	seeder := seeders.NewDatabaseSeeder(seederFile)
 

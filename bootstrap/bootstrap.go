@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/galaplate/core/database"
 	config "github.com/galaplate/core/env"
@@ -17,123 +16,88 @@ import (
 	"gorm.io/gorm"
 )
 
-// GormConfig holds GORM-specific configuration
-type GormConfig struct {
-	gorm.Config
-
-	// Additional logger-specific configs for easier configuration
-	SlowThreshold             time.Duration
-	LogLevel                  string // Silent, Error, Warn, Info
-	IgnoreRecordNotFoundError bool
-	ParameterizedQueries      bool
-	Colorful                  bool
-}
-
-// DatabaseConfig holds database connection configuration
-type DatabaseConfig struct {
-	GormConfig *GormConfig
-}
-
 // AppConfig holds configuration for creating the Fiber app
 type AppConfig struct {
-	TemplateDir         string
-	TemplateExt         string
 	AppSecret           string
 	SetupRoutes         func(*fiber.App)
 	StartBackgroundJobs bool
 	QueueSize           int
 	WorkerCount         int
-	DatabaseConfig      *DatabaseConfig
+	GormConfig          *gorm.Config
+	FiberConfig         *fiber.Config
 }
 
-// DefaultGormConfig returns default GORM configuration
-func DefaultGormConfig() *GormConfig {
-	return &GormConfig{
-		Config: gorm.Config{
-			DisableForeignKeyConstraintWhenMigrating: true,
-		},
-		SlowThreshold:             time.Second,
-		LogLevel:                  "Warn",
-		IgnoreRecordNotFoundError: true,
-		ParameterizedQueries:      true,
-		Colorful:                  true,
-	}
-}
+// OptFunc is a functional option for configuring AppConfig
+type OptFunc func(*AppConfig)
 
 // DefaultConfig returns default configuration
 func DefaultConfig() *AppConfig {
 	return &AppConfig{
-		TemplateDir:         "./templates",
-		TemplateExt:         ".html",
 		StartBackgroundJobs: true,
 		QueueSize:           100,
 		WorkerCount:         5,
+		FiberConfig: &fiber.Config{
+			Views: html.New("./templates", ".html"),
+			ErrorHandler: func(c *fiber.Ctx, err error) error {
+				var errResponse supports.GlobalErrorHandlerResp
+				if json.Unmarshal([]byte(err.Error()), &errResponse) != nil {
+					var e *fiber.Error
+					code := fiber.StatusInternalServerError
+					message := fmt.Sprintf("Internal Server Error: %v", err.Error())
+					if errors.As(err, &e) {
+						code = e.Code
+						message = e.Message
+					}
+					logger.Error(err)
+
+					return c.Status(code).JSON(fiber.Map{
+						"success": false,
+						"message": message,
+						"error":   message,
+					})
+				}
+				return c.Status(errResponse.Status).JSON(errResponse)
+			},
+		},
 	}
 }
 
-func App(cfg *AppConfig) *fiber.App {
-	if cfg == nil {
-		cfg = DefaultConfig()
+// NewApp creates a new Fiber app with optional configurations
+func NewApp(opts ...OptFunc) *fiber.App {
+	cfg := DefaultConfig()
+
+	for _, opt := range opts {
+		opt(cfg)
 	}
 
-	screet := cfg.AppSecret
+	return appWithConfig(cfg)
+}
+
+func appWithConfig(cfg *AppConfig) *fiber.App {
+    screet := config.Get("APP_SECRET")
+    supports.Dump(screet)
 	if screet == "" {
-		screet = config.Get("APP_SECRET")
-		if screet == "" {
-			panic("You must generate the screet key first")
-		}
+		panic("You must generate the screet key first")
 	}
 
-	engine := html.New(cfg.TemplateDir, cfg.TemplateExt)
+	var fiberCfg *fiber.Config
+	if cfg.FiberConfig != nil {
+		fiberCfg = cfg.FiberConfig
+	}
 
-	app := fiber.New(fiber.Config{
-		Views: engine,
-		ErrorHandler: func(c *fiber.Ctx, err error) error {
-			var errResponse supports.GlobalErrorHandlerResp
-			if json.Unmarshal([]byte(err.Error()), &errResponse) != nil {
-				var e *fiber.Error
-				code := fiber.StatusInternalServerError
-				message := fmt.Sprintf("Internal Server Error: %v", err.Error())
-				if errors.As(err, &e) {
-					code = e.Code
-					message = e.Message
-				}
-				logger.Error(err)
-
-				return c.Status(code).JSON(fiber.Map{
-					"success": false,
-					"message": message,
-					"error":   message,
-				})
-			}
-			return c.Status(errResponse.Status).JSON(errResponse)
-		},
-	})
-
-	// Connect DB (can be swapped with test DB)
-	if cfg.DatabaseConfig != nil && cfg.DatabaseConfig.GormConfig != nil {
-		dbConfig := &database.Config{
-			GormConfig: &database.GormConfig{
-				Config:                    cfg.DatabaseConfig.GormConfig.Config,
-				SlowThreshold:             cfg.DatabaseConfig.GormConfig.SlowThreshold,
-				LogLevel:                  cfg.DatabaseConfig.GormConfig.LogLevel,
-				IgnoreRecordNotFoundError: cfg.DatabaseConfig.GormConfig.IgnoreRecordNotFoundError,
-				ParameterizedQueries:      cfg.DatabaseConfig.GormConfig.ParameterizedQueries,
-				Colorful:                  cfg.DatabaseConfig.GormConfig.Colorful,
-			},
-		}
-
-		database.ConnectWithConfig(dbConfig)
+	app := fiber.New(*fiberCfg)
+	if cfg.GormConfig != nil {
+		database.New(func(c *database.Config) {
+			c.GormConfig = cfg.GormConfig
+		})
 	} else {
-		database.ConnectDB()
+		database.New()
 	}
 
-	// Setup routes (provided by application)
 	if cfg.SetupRoutes != nil {
 		cfg.SetupRoutes(app)
 	}
 
-	// Start background jobs (can be skipped in tests)
 	if cfg.StartBackgroundJobs {
 		q := queue.New(cfg.QueueSize)
 		q.Start(cfg.WorkerCount)
@@ -144,36 +108,4 @@ func App(cfg *AppConfig) *fiber.App {
 	}
 
 	return app
-}
-
-func Init(cfg *AppConfig) {
-	dbConfig := cfg.DatabaseConfig
-	var screet string
-	if cfg.AppSecret != "" {
-		screet = cfg.AppSecret
-	} else {
-		screet = config.Get("APP_SECRET")
-	}
-
-	if screet == "" {
-		panic("You must generate the screet key first")
-	}
-
-	// Connect DB for console commands
-	if dbConfig != nil && dbConfig.GormConfig != nil {
-		dbCfg := &database.Config{
-			GormConfig: &database.GormConfig{
-				Config:                    dbConfig.GormConfig.Config,
-				SlowThreshold:             dbConfig.GormConfig.SlowThreshold,
-				LogLevel:                  dbConfig.GormConfig.LogLevel,
-				IgnoreRecordNotFoundError: dbConfig.GormConfig.IgnoreRecordNotFoundError,
-				ParameterizedQueries:      dbConfig.GormConfig.ParameterizedQueries,
-				Colorful:                  dbConfig.GormConfig.Colorful,
-			},
-		}
-
-		database.ConnectWithConfig(dbCfg)
-	} else {
-		database.ConnectDB()
-	}
 }

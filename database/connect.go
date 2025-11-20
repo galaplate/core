@@ -17,25 +17,62 @@ import (
 
 var Connect *gorm.DB
 
-type GormConfig struct {
-	gorm.Config
-
-	// Additional logger-specific configs for easier configuration
-	SlowThreshold             time.Duration
-	LogLevel                  string // Silent, Error, Warn, Info
-	IgnoreRecordNotFoundError bool
-	ParameterizedQueries      bool
-	Colorful                  bool
-}
 
 type Config struct {
-	GormConfig *GormConfig
+	GormConfig *gorm.Config
 }
 
 func ConnectDB() {
-	ConnectWithConfig(nil)
+	// ConnectWithConfig(nil)
 }
 
+type OptFunc func(*Config)
+
+func New(opts ...OptFunc) {
+	cfg := DefaultGormConfig()
+
+	// Apply all provided options
+	for _, opt := range opts {
+		opt(cfg)
+	}
+
+	ConnectWithConfig(cfg)
+}
+
+// DefaultGormConfig returns default GORM configuration
+func DefaultGormConfig() *Config {
+	var logLevel logger.LogLevel
+	logLevelStr := "warn" // default
+
+	switch strings.ToLower(logLevelStr) {
+	case "silent":
+		logLevel = logger.Silent
+	case "error":
+		logLevel = logger.Error
+	case "warn":
+		logLevel = logger.Warn
+	case "info":
+		logLevel = logger.Info
+	default:
+		logLevel = logger.Warn
+	}
+
+	return &Config{
+		GormConfig: &gorm.Config{
+			Logger: logger.New(
+				log.New(os.Stdout, "\r\n", log.LstdFlags),
+				logger.Config{
+					SlowThreshold:             time.Second,
+					LogLevel:                  logLevel,
+					IgnoreRecordNotFoundError: true,
+					ParameterizedQueries:      true,
+					Colorful:                  true,
+				},
+			),
+			DisableForeignKeyConstraintWhenMigrating: true,
+		},
+	}
+}
 func ConnectWithConfig(cfg *Config) {
 	var err error
 	var dsn string
@@ -51,67 +88,6 @@ func ConnectWithConfig(cfg *Config) {
 	password = config.Get("DB_PASSWORD")
 	database = config.Get("DB_DATABASE")
 
-	// Configure GORM settings
-	var gormCfg *GormConfig
-	if cfg != nil && cfg.GormConfig != nil {
-		gormCfg = cfg.GormConfig
-	} else {
-		// Default GORM configuration
-		gormCfg = &GormConfig{
-			Config: gorm.Config{
-				DisableForeignKeyConstraintWhenMigrating: true,
-			},
-			SlowThreshold:             time.Second,
-			LogLevel:                  "Warn",
-			IgnoreRecordNotFoundError: true,
-			ParameterizedQueries:      true,
-			Colorful:                  true,
-		}
-	}
-
-	// Convert log level string to logger level
-	var logLevel logger.LogLevel
-	logLevelStr := "warn" // default
-	if gormCfg.LogLevel != "" {
-		logLevelStr = gormCfg.LogLevel
-	}
-
-	switch strings.ToLower(logLevelStr) {
-	case "silent":
-		logLevel = logger.Silent
-	case "error":
-		logLevel = logger.Error
-	case "warn":
-		logLevel = logger.Warn
-	case "info":
-		logLevel = logger.Info
-	default:
-		logLevel = logger.Warn
-	}
-
-	// Start with the embedded gorm.Config
-	gormConfig := &gormCfg.Config
-
-	// Set/override the logger if not already set
-	if gormConfig.Logger == nil {
-		// Set default values if not provided
-		slowThreshold := gormCfg.SlowThreshold
-		if slowThreshold == 0 {
-			slowThreshold = time.Second
-		}
-
-		gormConfig.Logger = logger.New(
-			log.New(os.Stdout, "\r\n", log.LstdFlags),
-			logger.Config{
-				SlowThreshold:             slowThreshold,
-				LogLevel:                  logLevel,
-				IgnoreRecordNotFoundError: gormCfg.IgnoreRecordNotFoundError,
-				ParameterizedQueries:      gormCfg.ParameterizedQueries,
-				Colorful:                  gormCfg.Colorful,
-			},
-		)
-	}
-
 	switch dbType {
 	case "postgres":
 		dsn = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
@@ -120,7 +96,7 @@ func ConnectWithConfig(cfg *Config) {
 
 		db, err = gorm.Open(
 			postgres.Open(dsn),
-			gormConfig,
+			cfg.GormConfig,
 		)
 
 	case "mysql":
@@ -130,7 +106,7 @@ func ConnectWithConfig(cfg *Config) {
 
 		db, err = gorm.Open(
 			mysql.Open(dsn),
-			gormConfig,
+			cfg.GormConfig,
 		)
 
 	case "sqlite":
@@ -141,7 +117,7 @@ func ConnectWithConfig(cfg *Config) {
 
 		db, err = gorm.Open(
 			sqlite.Open(dsn),
-			gormConfig,
+			cfg.GormConfig,
 		)
 	default:
 		log.Panic("Unsupported database type", dbType)
