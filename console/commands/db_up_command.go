@@ -1,5 +1,9 @@
 package commands
 
+import (
+	"github.com/galaplate/core/database"
+)
+
 type DbUpCommand struct {
 	BaseCommand
 }
@@ -13,19 +17,14 @@ func (c *DbUpCommand) GetDescription() string {
 }
 
 func (c *DbUpCommand) Execute(args []string) error {
-	if err := c.CheckDbmate(); err != nil {
-		c.PrintError(err.Error())
-		c.PrintInfo("Install with: go install github.com/amacneil/dbmate@latest")
+	// Initialize database connection
+	database.New()
+
+	migrator := database.NewMigrator()
+
+	if err := migrator.Up(); err != nil {
 		return err
 	}
 
-	c.PrintInfo("Running pending migrations...")
-
-	if err := c.RunDbmate("up"); err != nil {
-		c.PrintError("Migrations failed")
-		return err
-	}
-
-	c.PrintSuccess("Migrations completed successfully")
 	return nil
 }

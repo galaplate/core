@@ -1,5 +1,9 @@
 package commands
 
+import (
+	"github.com/galaplate/core/database"
+)
+
 type DbStatusCommand struct {
 	BaseCommand
 }
@@ -13,16 +17,12 @@ func (c *DbStatusCommand) GetDescription() string {
 }
 
 func (c *DbStatusCommand) Execute(args []string) error {
-	if err := c.CheckDbmate(); err != nil {
-		c.PrintError(err.Error())
-		c.PrintInfo("Install with: go install github.com/amacneil/dbmate@latest")
-		return err
-	}
+	// Initialize database connection
+	database.New()
 
-	c.PrintInfo("Migration status:")
+	migrator := database.NewMigrator()
 
-	if err := c.RunDbmate("status"); err != nil {
-		c.PrintError("Failed to get migration status")
+	if err := migrator.Status(); err != nil {
 		return err
 	}
 

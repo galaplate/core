@@ -1,6 +1,10 @@
 package commands
 
-import "slices"
+import (
+	"slices"
+
+	"github.com/galaplate/core/database"
+)
 
 type DbResetCommand struct {
 	BaseCommand
@@ -11,41 +15,30 @@ func (c *DbResetCommand) GetSignature() string {
 }
 
 func (c *DbResetCommand) GetDescription() string {
-	return "Drop and recreate the database"
+	return "Rollback all migrations"
 }
 
 func (c *DbResetCommand) Execute(args []string) error {
-	if err := c.CheckDbmate(); err != nil {
-		c.PrintError(err.Error())
-		c.PrintInfo("Install with: go install github.com/amacneil/dbmate@latest")
-		return err
-	}
-
-	c.PrintWarning("⚠️  DANGER: This will drop and recreate the entire database!")
-	c.PrintWarning("All data will be permanently lost!")
+	// Initialize database connection
+	database.New()
 
 	skipConfirmation := slices.Contains(args, "--force")
 
 	if !skipConfirmation {
-		response := c.AskText("Type 'yes' to confirm database reset", "")
+		c.PrintWarning("⚠️  DANGER: This will rollback all migrations!")
+		c.PrintWarning("All data will be permanently lost!")
+		response := c.AskText("Type 'yes' to confirm reset", "")
 		if response != "yes" {
-			c.PrintInfo("Database reset cancelled")
+			c.PrintInfo("Reset cancelled")
 			return nil
 		}
 	}
 
-	c.PrintInfo("Dropping database...")
-	if err := c.RunDbmate("drop"); err != nil {
-		c.PrintError("Failed to drop database")
+	migrator := database.NewMigrator()
+
+	if err := migrator.Reset(); err != nil {
 		return err
 	}
 
-	c.PrintInfo("Creating database...")
-	if err := c.RunDbmate("create"); err != nil {
-		c.PrintError("Failed to create database")
-		return err
-	}
-
-	c.PrintSuccess("Database reset completed successfully")
 	return nil
 }

@@ -1,6 +1,10 @@
 package commands
 
-import "slices"
+import (
+	"slices"
+
+	"github.com/galaplate/core/database"
+)
 
 type DbDownCommand struct {
 	BaseCommand
@@ -11,21 +15,17 @@ func (c *DbDownCommand) GetSignature() string {
 }
 
 func (c *DbDownCommand) GetDescription() string {
-	return "Rollback the last database migration"
+	return "Rollback the last database migration batch"
 }
 
 func (c *DbDownCommand) Execute(args []string) error {
-	if err := c.CheckDbmate(); err != nil {
-		c.PrintError(err.Error())
-		c.PrintInfo("Install with: go install github.com/amacneil/dbmate@latest")
-		return err
-	}
-
-	c.PrintWarning("This will rollback the last migration")
+	// Initialize database connection
+	database.New()
 
 	skipConfirmation := slices.Contains(args, "--force")
 
 	if !skipConfirmation {
+		c.PrintWarning("This will rollback the last migration batch")
 		confirmed := c.AskConfirmation("Are you sure you want to rollback?", false)
 		if !confirmed {
 			c.PrintInfo("Rollback cancelled")
@@ -33,13 +33,11 @@ func (c *DbDownCommand) Execute(args []string) error {
 		}
 	}
 
-	c.PrintInfo("Rolling back last migration...")
+	migrator := database.NewMigrator()
 
-	if err := c.RunDbmate("down"); err != nil {
-		c.PrintError("Rollback failed")
+	if err := migrator.Down(); err != nil {
 		return err
 	}
 
-	c.PrintSuccess("Rollback completed successfully")
 	return nil
 }
