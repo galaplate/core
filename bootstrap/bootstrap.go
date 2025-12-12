@@ -18,7 +18,6 @@ import (
 
 // AppConfig holds configuration for creating the Fiber app
 type AppConfig struct {
-	AppSecret           string
 	SetupRoutes         func(*fiber.App)
 	StartBackgroundJobs bool
 	QueueSize           int
@@ -75,7 +74,6 @@ func NewApp(opts ...OptFunc) *fiber.App {
 
 func appWithConfig(cfg *AppConfig) *fiber.App {
     screet := config.Get("APP_SECRET")
-    supports.Dump(screet)
 	if screet == "" {
 		panic("You must generate the screet key first")
 	}
