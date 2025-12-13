@@ -41,6 +41,10 @@ func (m *Migrator) CreateMigrationsTable() error {
 
 // GetRanMigrations returns migrations that have been run
 func (m *Migrator) GetRanMigrations() ([]string, error) {
+	if err := m.CreateMigrationsTable(); err != nil {
+		return nil, err
+	}
+
 	var migrations []MigrationInfo
 	err := m.db.Table("migrations").Order("batch ASC, migration ASC").Find(&migrations).Error
 	if err != nil {
@@ -86,6 +90,10 @@ func (m *Migrator) GetPendingMigrations() ([]Migration, error) {
 
 // GetLastBatch returns the last batch number
 func (m *Migrator) GetLastBatch() (int, error) {
+	if err := m.CreateMigrationsTable(); err != nil {
+		return 0, err
+	}
+
 	var batch int
 	err := m.db.Table("migrations").Select("COALESCE(MAX(batch), 0) as batch").Scan(&batch).Error
 	return batch, err
@@ -183,6 +191,10 @@ func (m *Migrator) Up() error {
 
 // Down rolls back the last batch of migrations
 func (m *Migrator) Down() error {
+	if err := m.CreateMigrationsTable(); err != nil {
+		return fmt.Errorf("failed to create migrations table: %w", err)
+	}
+
 	migrations, err := m.GetMigrationsForRollback()
 	if err != nil {
 		return fmt.Errorf("failed to get rollback migrations: %w", err)
@@ -265,6 +277,10 @@ func (m *Migrator) Status() error {
 
 // Reset rolls back all migrations
 func (m *Migrator) Reset() error {
+	if err := m.CreateMigrationsTable(); err != nil {
+		return fmt.Errorf("failed to create migrations table: %w", err)
+	}
+
 	for {
 		migrations, err := m.GetMigrationsForRollback()
 		if err != nil {
