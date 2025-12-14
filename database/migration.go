@@ -21,7 +21,7 @@ type BaseMigration struct {
 }
 
 func (m *BaseMigration) GetName() string {
-	return m.Name
+	return fmt.Sprintf("%d_%s", m.Timestamp, m.Name)
 }
 
 func (m *BaseMigration) GetTimestamp() int64 {
@@ -55,7 +55,7 @@ func (r *MigrationRegistry) Register(migration Migration) {
 // GetMigrations returns all registered migrations sorted by timestamp
 func (r *MigrationRegistry) GetMigrations() []Migration {
 	// Sort migrations by timestamp
-	for i := 0; i < len(r.migrations); i++ {
+	for i := range r.migrations {
 		for j := i + 1; j < len(r.migrations); j++ {
 			if r.migrations[i].GetTimestamp() > r.migrations[j].GetTimestamp() {
 				r.migrations[i], r.migrations[j] = r.migrations[j], r.migrations[i]

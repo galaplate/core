@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"text/template"
+
+	"github.com/galaplate/core/supports"
 )
 
 // BaseCommand provides common functionality for all commands
@@ -265,7 +267,7 @@ func (b *BaseCommand) BuildDatabaseURL() (string, error) {
 		return "", err
 	}
 
-	dbConnection := strings.Trim(os.Getenv("DB_CONNECTION"), `"`)
+	dbConnection := supports.MapPostgres(strings.Trim(os.Getenv("DB_CONNECTION"), `"`))
 	dbHost := strings.Trim(os.Getenv("DB_HOST"), `"`)
 	dbPort := strings.Trim(os.Getenv("DB_PORT"), `"`)
 	dbDatabase := strings.Trim(os.Getenv("DB_DATABASE"), `"`)
@@ -284,7 +286,7 @@ func (b *BaseCommand) BuildDatabaseURL() (string, error) {
 		}
 		return fmt.Sprintf("mysql://%s:%s@%s:%s/%s?parseTime=true",
 			dbUsername, dbPassword, dbHost, dbPort, dbDatabase), nil
-	case "postgres", "postgresql":
+	case "postgres":
 		if dbHost == "" || dbPort == "" || dbDatabase == "" {
 			return "", fmt.Errorf("missing PostgreSQL database configuration in .env file")
 		}

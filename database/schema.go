@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	config "github.com/galaplate/core/env"
+	"github.com/galaplate/core/supports"
 	"gorm.io/gorm"
 )
 
@@ -18,7 +19,7 @@ type Schema struct {
 func NewSchema() *Schema {
 	return &Schema{
 		db:     Connect,
-		dbType: config.Get("DB_CONNECTION"),
+		dbType: supports.MapPostgres(config.Get("DB_CONNECTION")),
 	}
 }
 
@@ -87,29 +88,79 @@ func (s *Schema) HasColumn(tableName, columnName string) bool {
 
 // Blueprint represents a table blueprint for building schema
 type Blueprint struct {
-	tableName string
-	dbType    string
-	mode      string // "create" or "alter"
-	columns   []Column
-	indexes   []Index
-	foreign   []ForeignKey
+	tableName    string
+	dbType       string
+	mode         string // "create" or "alter"
+	columns      []Column
+	indexes      []Index
+	foreign      []ForeignKey
+	dropColumns  []string
+	dropIndexes  []string
+	dropForeigns []string
 }
 
 // NewBlueprint creates a new Blueprint
 func NewBlueprint(tableName, dbType string) *Blueprint {
 	return &Blueprint{
-		tableName: tableName,
-		dbType:    dbType,
-		mode:      "create",
-		columns:   []Column{},
-		indexes:   []Index{},
-		foreign:   []ForeignKey{},
+		tableName:    tableName,
+		dbType:       supports.MapPostgres(dbType),
+		mode:         "create",
+		columns:      []Column{},
+		indexes:      []Index{},
+		foreign:      []ForeignKey{},
+		dropColumns:  []string{},
+		dropIndexes:  []string{},
+		dropForeigns: []string{},
 	}
 }
 
 // SetMode sets the blueprint mode (create/alter)
 func (b *Blueprint) SetMode(mode string) {
 	b.mode = mode
+}
+
+// quoteIdentifier quotes an identifier based on database type
+func (b *Blueprint) quoteIdentifier(name string) string {
+	// Check if identifier needs quoting (reserved words, special characters, etc.)
+	if b.needsQuoting(name) {
+		switch b.dbType {
+		case "mysql":
+			return fmt.Sprintf("`%s`", name)
+		case "postgres", "sqlite":
+			return fmt.Sprintf("\"%s\"", name)
+		default:
+			return name
+		}
+	}
+	return name
+}
+
+// needsQuoting checks if an identifier needs to be quoted
+func (b *Blueprint) needsQuoting(name string) bool {
+	// Common reserved words that often cause issues
+	reservedWords := map[string]bool{
+		"key": true, "user": true, "order": true, "group": true, "table": true,
+		"column": true, "index": true, "primary": true, "foreign": true, "unique": true,
+		"check": true, "default": true, "null": true, "select": true, "insert": true,
+		"update": true, "delete": true, "create": true, "drop": true, "alter": true,
+		"where": true, "from": true, "join": true, "limit": true, "offset": true,
+		"having": true, "union": true, "begin": true, "commit": true, "rollback": true,
+		"set": true, "show": true, "type": true, "time": true, "timestamp": true,
+		"date": true, "boolean": true, "text": true, "varchar": true, "char": true,
+		"integer": true, "bigint": true, "serial": true, "bigserial": true,
+	}
+
+	// Check if it's a reserved word
+	if reservedWords[strings.ToLower(name)] {
+		return true
+	}
+
+	// Check if it contains special characters or starts with a number
+	if strings.ContainsAny(name, " -+*/=<>!@#$%^&()[]{}|\\:;\"'.,?~`") || (len(name) > 0 && name[0] >= '0' && name[0] <= '9') {
+		return true
+	}
+
+	return false
 }
 
 // Column represents a database column
@@ -124,6 +175,7 @@ type Column struct {
 	Unique     bool
 	Primary    bool
 	Auto       bool
+	Unsigned   bool
 	Comment    string
 	After      string // For MySQL ALTER TABLE
 	EnumValues []string
@@ -539,6 +591,22 @@ func (b *Blueprint) Comment(comment string) *Blueprint {
 	return b
 }
 
+// Unsigned makes the column unsigned (for numeric types)
+func (b *Blueprint) Unsigned() *Blueprint {
+	if len(b.columns) > 0 {
+		b.columns[len(b.columns)-1].Unsigned = true
+	}
+	return b
+}
+
+// Signed makes the column signed (for numeric types) - this is the default
+func (b *Blueprint) Signed() *Blueprint {
+	if len(b.columns) > 0 {
+		b.columns[len(b.columns)-1].Unsigned = false
+	}
+	return b
+}
+
 // Index methods
 
 // Index creates an index
@@ -568,6 +636,22 @@ func (b *Blueprint) UniqueIndex(columns []string, name ...string) *Blueprint {
 		Name:    indexName,
 		Columns: columns,
 		Type:    "unique",
+	}
+	b.indexes = append(b.indexes, idx)
+	return b
+}
+
+// Primary creates a primary key index
+func (b *Blueprint) Primary(columns []string, name ...string) *Blueprint {
+	indexName := fmt.Sprintf("pk_%s", b.tableName)
+	if len(name) > 0 {
+		indexName = name[0]
+	}
+
+	idx := Index{
+		Name:    indexName,
+		Columns: columns,
+		Type:    "primary",
 	}
 	b.indexes = append(b.indexes, idx)
 	return b
@@ -619,6 +703,31 @@ func (fkb *ForeignKeyBuilder) Finish() *Blueprint {
 	return fkb.blueprint
 }
 
+// Drop methods
+
+// DropColumn drops a column
+func (b *Blueprint) DropColumn(column string) *Blueprint {
+	b.dropColumns = append(b.dropColumns, column)
+	return b
+}
+
+// DropIndex drops an index
+func (b *Blueprint) DropIndex(indexName string) *Blueprint {
+	b.dropIndexes = append(b.dropIndexes, indexName)
+	return b
+}
+
+// DropUniqueIndex drops a unique index (alias for DropIndex)
+func (b *Blueprint) DropUniqueIndex(indexName string) *Blueprint {
+	return b.DropIndex(indexName)
+}
+
+// DropForeign drops a foreign key constraint
+func (b *Blueprint) DropForeign(constraintName string) *Blueprint {
+	b.dropForeigns = append(b.dropForeigns, constraintName)
+	return b
+}
+
 // ToSQL converts the blueprint to SQL - handles database differences
 func (b *Blueprint) ToSQL() string {
 	switch b.mode {
@@ -643,9 +752,11 @@ func (b *Blueprint) toCreateSQL() string {
 
 	sql.WriteString("  " + strings.Join(columnSQLs, ",\n  "))
 
-	// Add indexes
+	// Add indexes - primary keys are always inline, regular indexes are separate for PostgreSQL
 	for _, idx := range b.indexes {
-		sql.WriteString(",\n  " + b.indexToSQL(idx))
+		if idx.Type == "primary" || b.dbType != "postgres" {
+			sql.WriteString(",\n  " + b.indexToSQL(idx))
+		}
 	}
 
 	// Add foreign keys
@@ -655,12 +766,63 @@ func (b *Blueprint) toCreateSQL() string {
 
 	sql.WriteString("\n);")
 
+	// For PostgreSQL, add separate CREATE INDEX statements for non-primary indexes
+	if b.dbType == "postgres" {
+		for _, idx := range b.indexes {
+			if idx.Type != "primary" {
+				var indexSQL string
+				switch idx.Type {
+				case "unique":
+					indexSQL = fmt.Sprintf("CREATE UNIQUE INDEX %s ON %s (%s);",
+						idx.Name, b.tableName, strings.Join(idx.Columns, ", "))
+				default:
+					indexSQL = fmt.Sprintf("CREATE INDEX %s ON %s (%s);",
+						idx.Name, b.tableName, strings.Join(idx.Columns, ", "))
+				}
+				sql.WriteString("\n" + indexSQL)
+			}
+		}
+	}
+
 	return sql.String()
 }
 
 // toAlterSQL generates ALTER TABLE SQL
 func (b *Blueprint) toAlterSQL() string {
 	var sqls []string
+
+	// Drop foreign keys
+	for _, constraint := range b.dropForeigns {
+		var sql string
+		switch b.dbType {
+		case "mysql":
+			sql = fmt.Sprintf("ALTER TABLE %s DROP FOREIGN KEY %s;", b.tableName, b.quoteIdentifier(constraint))
+		case "postgres":
+			sql = fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s;", b.tableName, b.quoteIdentifier(constraint))
+		case "sqlite":
+			// SQLite doesn't have named constraints, skip
+			continue
+		}
+		sqls = append(sqls, sql)
+	}
+
+	// Drop indexes
+	for _, indexName := range b.dropIndexes {
+		var sql string
+		switch b.dbType {
+		case "mysql":
+			sql = fmt.Sprintf("DROP INDEX %s ON %s;", b.quoteIdentifier(indexName), b.tableName)
+		case "postgres", "sqlite":
+			sql = fmt.Sprintf("DROP INDEX %s;", b.quoteIdentifier(indexName))
+		}
+		sqls = append(sqls, sql)
+	}
+
+	// Drop columns
+	for _, column := range b.dropColumns {
+		sql := fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s;", b.tableName, b.quoteIdentifier(column))
+		sqls = append(sqls, sql)
+	}
 
 	// Add columns
 	for _, col := range b.columns {
@@ -670,14 +832,20 @@ func (b *Blueprint) toAlterSQL() string {
 
 	// Add indexes
 	for _, idx := range b.indexes {
+		// Quote column names
+		quotedColumns := make([]string, len(idx.Columns))
+		for i, col := range idx.Columns {
+			quotedColumns[i] = b.quoteIdentifier(col)
+		}
+
 		var sql string
 		switch idx.Type {
 		case "unique":
 			sql = fmt.Sprintf("CREATE UNIQUE INDEX %s ON %s (%s);",
-				idx.Name, b.tableName, strings.Join(idx.Columns, ", "))
+				b.quoteIdentifier(idx.Name), b.tableName, strings.Join(quotedColumns, ", "))
 		default:
 			sql = fmt.Sprintf("CREATE INDEX %s ON %s (%s);",
-				idx.Name, b.tableName, strings.Join(idx.Columns, ", "))
+				b.quoteIdentifier(idx.Name), b.tableName, strings.Join(quotedColumns, ", "))
 		}
 		sqls = append(sqls, sql)
 	}
@@ -687,7 +855,7 @@ func (b *Blueprint) toAlterSQL() string {
 
 // columnToSQL converts a column to SQL
 func (b *Blueprint) columnToSQL(col Column) string {
-	parts := []string{col.Name}
+	parts := []string{b.quoteIdentifier(col.Name)}
 
 	// Get database-specific type
 	dbType := b.getColumnType(col)
@@ -735,7 +903,7 @@ func (b *Blueprint) columnToSQL(col Column) string {
 		for i, v := range col.EnumValues {
 			quotedValues[i] = fmt.Sprintf("'%s'", strings.ReplaceAll(v, "'", "''"))
 		}
-		checkConstraint := fmt.Sprintf("CHECK (%s IN (%s))", col.Name, strings.Join(quotedValues, ", "))
+		checkConstraint := fmt.Sprintf("CHECK (%s IN (%s))", b.quoteIdentifier(col.Name), strings.Join(quotedValues, ", "))
 		parts = append(parts, checkConstraint)
 	}
 
@@ -894,11 +1062,30 @@ func (b *Blueprint) getColumnType(col Column) string {
 
 	if dbTypes, exists := typeMap[col.Type]; exists {
 		if dbType, exists := dbTypes[b.dbType]; exists {
+			// Add UNSIGNED modifier for numeric types in MySQL
+			if col.Unsigned && b.dbType == "mysql" && b.isNumericType(col.Type) {
+				dbType += " UNSIGNED"
+			}
 			return dbType
 		}
 	}
 
 	return col.Type // fallback to original type
+}
+
+// isNumericType checks if a type is numeric and can be unsigned
+func (b *Blueprint) isNumericType(colType string) bool {
+	numericTypes := map[string]bool{
+		"integer":   true,
+		"bigint":    true,
+		"tinyint":   true,
+		"smallint":  true,
+		"mediumint": true,
+		"float":     true,
+		"double":    true,
+		"decimal":   true,
+	}
+	return numericTypes[colType]
 }
 
 // getEnumType returns database-specific ENUM type
@@ -929,17 +1116,26 @@ func (b *Blueprint) getEnumType(col Column) string {
 
 // indexToSQL converts an index to SQL
 func (b *Blueprint) indexToSQL(idx Index) string {
+	// Quote column names in the index
+	quotedColumns := make([]string, len(idx.Columns))
+	for i, col := range idx.Columns {
+		quotedColumns[i] = b.quoteIdentifier(col)
+	}
+
 	switch idx.Type {
+	case "primary":
+		return fmt.Sprintf("PRIMARY KEY (%s)", strings.Join(quotedColumns, ", "))
 	case "unique":
-		return fmt.Sprintf("UNIQUE INDEX %s (%s)", idx.Name, strings.Join(idx.Columns, ", "))
+		return fmt.Sprintf("UNIQUE INDEX %s (%s)", b.quoteIdentifier(idx.Name), strings.Join(quotedColumns, ", "))
 	default:
-		return fmt.Sprintf("INDEX %s (%s)", idx.Name, strings.Join(idx.Columns, ", "))
+		return fmt.Sprintf("INDEX %s (%s)", b.quoteIdentifier(idx.Name), strings.Join(quotedColumns, ", "))
 	}
 }
 
 // foreignKeyToSQL converts a foreign key to SQL
 func (b *Blueprint) foreignKeyToSQL(fk ForeignKey) string {
-	sql := fmt.Sprintf("FOREIGN KEY (%s) REFERENCES %s (%s)", fk.Column, fk.On, fk.References)
+	sql := fmt.Sprintf("FOREIGN KEY (%s) REFERENCES %s (%s)",
+		b.quoteIdentifier(fk.Column), b.quoteIdentifier(fk.On), b.quoteIdentifier(fk.References))
 
 	if fk.OnDelete != "" {
 		sql += " ON DELETE " + fk.OnDelete

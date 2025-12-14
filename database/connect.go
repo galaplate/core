@@ -8,6 +8,7 @@ import (
 	"time"
 
 	config "github.com/galaplate/core/env"
+	"github.com/galaplate/core/supports"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
@@ -16,7 +17,6 @@ import (
 )
 
 var Connect *gorm.DB
-
 
 type Config struct {
 	GormConfig *gorm.Config
@@ -75,13 +75,12 @@ func DefaultGormConfig() *Config {
 }
 func ConnectWithConfig(cfg *Config) {
 	var err error
-	var dsn string
 	var db *gorm.DB
 
 	// Use provided config or fall back to environment variables
 	var dbType, host, port, username, password, database string
 
-	dbType = config.Get("DB_CONNECTION")
+	dbType = supports.MapPostgres(config.Get("DB_CONNECTION"))
 	host = config.Get("DB_HOST")
 	port = config.Get("DB_PORT")
 	username = config.Get("DB_USERNAME")
@@ -90,7 +89,7 @@ func ConnectWithConfig(cfg *Config) {
 
 	switch dbType {
 	case "postgres":
-		dsn = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+		dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
 			host, port, username, password, database,
 		)
 
@@ -100,7 +99,7 @@ func ConnectWithConfig(cfg *Config) {
 		)
 
 	case "mysql":
-		dsn = fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+		dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
 			username, password, host, port, database,
 		)
 
@@ -110,7 +109,7 @@ func ConnectWithConfig(cfg *Config) {
 		)
 
 	case "sqlite":
-		dsn = database
+		dsn := database
 		if dsn == "" {
 			dsn = "db/database.sqlite"
 		}

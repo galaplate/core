@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"time"
+
+	"github.com/galaplate/core/supports"
 )
 
 type DbDumpCommand struct {
@@ -26,7 +28,7 @@ func (c *DbDumpCommand) Execute(args []string) error {
 		return err
 	}
 
-	dbConnection := os.Getenv("DB_CONNECTION")
+	dbConnection := supports.MapPostgres(os.Getenv("DB_CONNECTION"))
 	dbHost := os.Getenv("DB_HOST")
 	dbPort := os.Getenv("DB_PORT")
 	dbDatabase := os.Getenv("DB_DATABASE")
@@ -93,7 +95,7 @@ func (c *DbDumpCommand) Execute(args []string) error {
 			"--triggers",
 			dbDatabase,
 		)
-	case "postgres", "postgresql":
+	case "postgres":
 		if err := c.checkCommand("pg_dump"); err != nil {
 			return err
 		}

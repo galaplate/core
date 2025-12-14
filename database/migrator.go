@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	config "github.com/galaplate/core/env"
+	"github.com/galaplate/core/supports"
 	"gorm.io/gorm"
 )
 
@@ -22,6 +24,42 @@ func NewMigrator() *Migrator {
 		db:       Connect,
 		schema:   NewSchema(),
 		registry: DefaultRegistry,
+	}
+}
+
+// disableForeignKeyChecks disables foreign key checks for the current database
+func (m *Migrator) disableForeignKeyChecks() error {
+	dbType := supports.MapPostgres(config.Get("DB_CONNECTION"))
+
+	switch dbType {
+	case "mysql":
+		return m.db.Exec("SET FOREIGN_KEY_CHECKS=0;").Error
+	case "postgres":
+		// PostgreSQL uses session-level setting
+		return m.db.Exec("SET session_replication_role = 'replica';").Error
+	case "sqlite":
+		return m.db.Exec("PRAGMA foreign_keys = OFF;").Error
+	default:
+		// Unknown database type, skip
+		return nil
+	}
+}
+
+// enableForeignKeyChecks enables foreign key checks for the current database
+func (m *Migrator) enableForeignKeyChecks() error {
+	dbType := supports.MapPostgres(config.Get("DB_CONNECTION"))
+
+	switch dbType {
+	case "mysql":
+		return m.db.Exec("SET FOREIGN_KEY_CHECKS=1;").Error
+	case "postgres":
+		// PostgreSQL uses session-level setting
+		return m.db.Exec("SET session_replication_role = 'origin';").Error
+	case "sqlite":
+		return m.db.Exec("PRAGMA foreign_keys = ON;").Error
+	default:
+		// Unknown database type, skip
+		return nil
 	}
 }
 
@@ -281,6 +319,30 @@ func (m *Migrator) Reset() error {
 		return fmt.Errorf("failed to create migrations table: %w", err)
 	}
 
+	// Disable foreign key checks
+	fmt.Println("Disabling foreign key checks...")
+	if err := m.disableForeignKeyChecks(); err != nil {
+		return fmt.Errorf("failed to disable foreign key checks: %w", err)
+	}
+
+	// Ensure foreign key checks are re-enabled even if there's an error
+	defer func() {
+		fmt.Println("Re-enabling foreign key checks...")
+		if err := m.enableForeignKeyChecks(); err != nil {
+			fmt.Printf("Warning: failed to re-enable foreign key checks: %v\n", err)
+		}
+	}()
+
+	// Rollback all batches
+	if err := m.resetMigrations(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// resetMigrations is the internal implementation without FK handling
+func (m *Migrator) resetMigrations() error {
 	for {
 		migrations, err := m.GetMigrationsForRollback()
 		if err != nil {
@@ -301,9 +363,29 @@ func (m *Migrator) Reset() error {
 
 // Refresh rolls back all migrations and runs them again
 func (m *Migrator) Refresh() error {
-	if err := m.Reset(); err != nil {
+	// Disable foreign key checks
+	fmt.Println("Disabling foreign key checks...")
+	if err := m.disableForeignKeyChecks(); err != nil {
+		return fmt.Errorf("failed to disable foreign key checks: %w", err)
+	}
+
+	// Ensure foreign key checks are re-enabled even if there's an error
+	defer func() {
+		fmt.Println("Re-enabling foreign key checks...")
+		if err := m.enableForeignKeyChecks(); err != nil {
+			fmt.Printf("Warning: failed to re-enable foreign key checks: %v\n", err)
+		}
+	}()
+
+	if err := m.CreateMigrationsTable(); err != nil {
+		return fmt.Errorf("failed to create migrations table: %w", err)
+	}
+
+	// Reset all migrations (internal version without FK handling)
+	if err := m.resetMigrations(); err != nil {
 		return err
 	}
 
+	// Run all migrations
 	return m.Up()
 }
