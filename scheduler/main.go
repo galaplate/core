@@ -8,6 +8,11 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
+
+type Handler interface {
+    Handle() (string, func())
+}
+
 type Scheduler struct {
 	cron *cron.Cron
 }
@@ -20,7 +25,7 @@ func New() *Scheduler {
 
 func (s *Scheduler) RunTasks() error {
 	for name, task := range SchedulerRegistry {
-		_, err := s.AddTask(task())
+		_, err := s.AddTask(task.Handle())
 		if err != nil {
 			logger.Fatal("Failed to register scheduler:", name, err)
 		}
@@ -41,8 +46,8 @@ func (s *Scheduler) Stop() context.Context {
 	return s.cron.Stop()
 }
 
-var SchedulerRegistry = map[string]func() (spec string, task func()){}
+var SchedulerRegistry = map[string]Handler{}
 
-func RegisterScheduler(name string, scheduler func() (spec string, task func())) {
+func RegisterScheduler(name string, scheduler Handler) {
 	SchedulerRegistry[name] = scheduler
 }

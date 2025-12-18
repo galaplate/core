@@ -32,5 +32,5 @@ func ({{.StructName}}) Handle() (string, func()) {
 }
 
 func init() {
-	scheduler.RegisterScheduler("{{.CronName}}", {{.StructName}}{}.Handle)
+	scheduler.RegisterScheduler("{{.CronName}}", {{.StructName}}{})
 }
