@@ -2,7 +2,6 @@ package scheduler
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/galaplate/core/logger"
 	"github.com/robfig/cron/v3"
@@ -29,7 +28,6 @@ func (s *Scheduler) RunTasks() error {
 		if err != nil {
 			logger.Fatal("Failed to register scheduler:", name, err)
 		}
-		fmt.Printf("Registering scheduler: %s\n", name)
 	}
 	return nil
 }
