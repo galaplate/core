@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/galaplate/core/database"
 	config "github.com/galaplate/core/env"
@@ -24,6 +25,7 @@ type AppConfig struct {
 	WorkerCount         int
 	GormConfig          *gorm.Config
 	FiberConfig         *fiber.Config
+	IsConsoleMode       bool
 }
 
 // OptFunc is a functional option for configuring AppConfig
@@ -31,10 +33,14 @@ type OptFunc func(*AppConfig)
 
 // DefaultConfig returns default configuration
 func DefaultConfig() *AppConfig {
+	// Auto-detect console mode based on command line arguments
+	isConsoleMode := len(os.Args) > 1 && os.Args[1] == "console"
+
 	return &AppConfig{
 		StartBackgroundJobs: true,
 		QueueSize:           100,
 		WorkerCount:         5,
+		IsConsoleMode:       isConsoleMode,
 		FiberConfig: &fiber.Config{
 			Views: html.New("./templates", ".html"),
 			ErrorHandler: func(c *fiber.Ctx, err error) error {
@@ -73,7 +79,7 @@ func NewApp(opts ...OptFunc) *fiber.App {
 }
 
 func appWithConfig(cfg *AppConfig) *fiber.App {
-    screet := config.Get("APP_SECRET")
+	screet := config.Get("APP_SECRET")
 	if screet == "" {
 		panic("You must generate the screet key first")
 	}
@@ -96,7 +102,8 @@ func appWithConfig(cfg *AppConfig) *fiber.App {
 		cfg.SetupRoutes(app)
 	}
 
-	if cfg.StartBackgroundJobs {
+	// Disable background jobs when running console commands
+	if cfg.StartBackgroundJobs && !cfg.IsConsoleMode {
 		q := queue.New(cfg.QueueSize)
 		q.Start(cfg.WorkerCount)
 
