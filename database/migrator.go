@@ -36,7 +36,7 @@ func (m *Migrator) disableForeignKeyChecks() error {
 		return m.db.Exec("SET FOREIGN_KEY_CHECKS=0;").Error
 	case "postgres":
 		// PostgreSQL uses session-level setting
-		return m.db.Exec("SET session_replication_role = 'replica';").Error
+		return nil
 	case "sqlite":
 		return m.db.Exec("PRAGMA foreign_keys = OFF;").Error
 	default:
@@ -54,7 +54,7 @@ func (m *Migrator) enableForeignKeyChecks() error {
 		return m.db.Exec("SET FOREIGN_KEY_CHECKS=1;").Error
 	case "postgres":
 		// PostgreSQL uses session-level setting
-		return m.db.Exec("SET session_replication_role = 'origin';").Error
+		return nil
 	case "sqlite":
 		return m.db.Exec("PRAGMA foreign_keys = ON;").Error
 	default:
