@@ -119,6 +119,17 @@ func (b *Blueprint) SetMode(mode string) {
 	b.mode = mode
 }
 
+// addOrUpdateColumn adds a column or updates the last one if it's a modify with matching name
+func (b *Blueprint) addOrUpdateColumn(col Column) {
+	// If last column is a modify with matching name, update it instead of appending
+	if len(b.columns) > 0 && b.columns[len(b.columns)-1].Modify && b.columns[len(b.columns)-1].Name == col.Name {
+		col.Modify = true
+		b.columns[len(b.columns)-1] = col
+	} else {
+		b.columns = append(b.columns, col)
+	}
+}
+
 // quoteIdentifier quotes an identifier based on database type
 func (b *Blueprint) quoteIdentifier(name string) string {
 	// Check if identifier needs quoting (reserved words, special characters, etc.)
@@ -179,6 +190,7 @@ type Column struct {
 	Comment    string
 	After      string // For MySQL ALTER TABLE
 	EnumValues []string
+	Modify     bool // Whether this column is being modified
 }
 
 // Index represents a database index
@@ -190,11 +202,13 @@ type Index struct {
 
 // ForeignKey represents a foreign key constraint
 type ForeignKey struct {
-	Column     string
-	References string
-	On         string
-	OnDelete   string
-	OnUpdate   string
+	Column            string
+	References        string
+	On                string
+	OnDelete          string
+	OnUpdate          string
+	Deferrable        bool
+	InitiallyDeferred bool
 }
 
 // Column type methods
@@ -222,7 +236,7 @@ func (b *Blueprint) String(name string, length ...int) *Blueprint {
 	if len(length) > 0 {
 		col.Length = length[0]
 	}
-	b.columns = append(b.columns, col)
+	b.addOrUpdateColumn(col)
 	return b
 }
 
@@ -233,7 +247,7 @@ func (b *Blueprint) Text(name string) *Blueprint {
 		Type:     "text",
 		Nullable: true,
 	}
-	b.columns = append(b.columns, col)
+	b.addOrUpdateColumn(col)
 	return b
 }
 
@@ -244,7 +258,7 @@ func (b *Blueprint) Integer(name string) *Blueprint {
 		Type:     "integer",
 		Nullable: true,
 	}
-	b.columns = append(b.columns, col)
+	b.addOrUpdateColumn(col)
 	return b
 }
 
@@ -255,7 +269,7 @@ func (b *Blueprint) BigInteger(name string) *Blueprint {
 		Type:     "bigint",
 		Nullable: true,
 	}
-	b.columns = append(b.columns, col)
+	b.addOrUpdateColumn(col)
 	return b
 }
 
@@ -267,7 +281,7 @@ func (b *Blueprint) Boolean(name string) *Blueprint {
 		Nullable: true,
 		Default:  false,
 	}
-	b.columns = append(b.columns, col)
+	b.addOrUpdateColumn(col)
 	return b
 }
 
@@ -278,7 +292,7 @@ func (b *Blueprint) JSON(name string) *Blueprint {
 		Type:     "json",
 		Nullable: true,
 	}
-	b.columns = append(b.columns, col)
+	b.addOrUpdateColumn(col)
 	return b
 }
 
@@ -289,7 +303,7 @@ func (b *Blueprint) Timestamp(name string) *Blueprint {
 		Type:     "timestamp",
 		Nullable: true,
 	}
-	b.columns = append(b.columns, col)
+	b.addOrUpdateColumn(col)
 	return b
 }
 
@@ -309,7 +323,7 @@ func (b *Blueprint) Decimal(name string, precision, scale int) *Blueprint {
 		Scale:     scale,
 		Nullable:  true,
 	}
-	b.columns = append(b.columns, col)
+	b.addOrUpdateColumn(col)
 	return b
 }
 
@@ -320,7 +334,7 @@ func (b *Blueprint) UUID(name string) *Blueprint {
 		Type:     "uuid",
 		Nullable: true,
 	}
-	b.columns = append(b.columns, col)
+	b.addOrUpdateColumn(col)
 	return b
 }
 
@@ -332,7 +346,7 @@ func (b *Blueprint) Enum(name string, values []string) *Blueprint {
 		EnumValues: values,
 		Nullable:   true,
 	}
-	b.columns = append(b.columns, col)
+	b.addOrUpdateColumn(col)
 	return b
 }
 
@@ -343,7 +357,7 @@ func (b *Blueprint) Date(name string) *Blueprint {
 		Type:     "date",
 		Nullable: true,
 	}
-	b.columns = append(b.columns, col)
+	b.addOrUpdateColumn(col)
 	return b
 }
 
@@ -354,7 +368,7 @@ func (b *Blueprint) DateTime(name string) *Blueprint {
 		Type:     "datetime",
 		Nullable: true,
 	}
-	b.columns = append(b.columns, col)
+	b.addOrUpdateColumn(col)
 	return b
 }
 
@@ -365,7 +379,7 @@ func (b *Blueprint) Time(name string) *Blueprint {
 		Type:     "time",
 		Nullable: true,
 	}
-	b.columns = append(b.columns, col)
+	b.addOrUpdateColumn(col)
 	return b
 }
 
@@ -376,7 +390,7 @@ func (b *Blueprint) Year(name string) *Blueprint {
 		Type:     "year",
 		Nullable: true,
 	}
-	b.columns = append(b.columns, col)
+	b.addOrUpdateColumn(col)
 	return b
 }
 
@@ -387,7 +401,7 @@ func (b *Blueprint) Float(name string) *Blueprint {
 		Type:     "float",
 		Nullable: true,
 	}
-	b.columns = append(b.columns, col)
+	b.addOrUpdateColumn(col)
 	return b
 }
 
@@ -398,7 +412,7 @@ func (b *Blueprint) Double(name string) *Blueprint {
 		Type:     "double",
 		Nullable: true,
 	}
-	b.columns = append(b.columns, col)
+	b.addOrUpdateColumn(col)
 	return b
 }
 
@@ -414,7 +428,7 @@ func (b *Blueprint) Char(name string, length ...int) *Blueprint {
 		Length:   columnLength,
 		Nullable: true,
 	}
-	b.columns = append(b.columns, col)
+	b.addOrUpdateColumn(col)
 	return b
 }
 
@@ -430,7 +444,7 @@ func (b *Blueprint) Binary(name string, length ...int) *Blueprint {
 		Length:   columnLength,
 		Nullable: true,
 	}
-	b.columns = append(b.columns, col)
+	b.addOrUpdateColumn(col)
 	return b
 }
 
@@ -446,7 +460,7 @@ func (b *Blueprint) VarBinary(name string, length ...int) *Blueprint {
 		Length:   columnLength,
 		Nullable: true,
 	}
-	b.columns = append(b.columns, col)
+	b.addOrUpdateColumn(col)
 	return b
 }
 
@@ -457,7 +471,7 @@ func (b *Blueprint) Blob(name string) *Blueprint {
 		Type:     "blob",
 		Nullable: true,
 	}
-	b.columns = append(b.columns, col)
+	b.addOrUpdateColumn(col)
 	return b
 }
 
@@ -468,7 +482,7 @@ func (b *Blueprint) MediumBlob(name string) *Blueprint {
 		Type:     "mediumblob",
 		Nullable: true,
 	}
-	b.columns = append(b.columns, col)
+	b.addOrUpdateColumn(col)
 	return b
 }
 
@@ -479,7 +493,7 @@ func (b *Blueprint) LongBlob(name string) *Blueprint {
 		Type:     "longblob",
 		Nullable: true,
 	}
-	b.columns = append(b.columns, col)
+	b.addOrUpdateColumn(col)
 	return b
 }
 
@@ -490,7 +504,7 @@ func (b *Blueprint) TinyInt(name string) *Blueprint {
 		Type:     "tinyint",
 		Nullable: true,
 	}
-	b.columns = append(b.columns, col)
+	b.addOrUpdateColumn(col)
 	return b
 }
 
@@ -501,7 +515,7 @@ func (b *Blueprint) SmallInt(name string) *Blueprint {
 		Type:     "smallint",
 		Nullable: true,
 	}
-	b.columns = append(b.columns, col)
+	b.addOrUpdateColumn(col)
 	return b
 }
 
@@ -512,7 +526,7 @@ func (b *Blueprint) MediumInt(name string) *Blueprint {
 		Type:     "mediumint",
 		Nullable: true,
 	}
-	b.columns = append(b.columns, col)
+	b.addOrUpdateColumn(col)
 	return b
 }
 
@@ -523,7 +537,7 @@ func (b *Blueprint) TinyText(name string) *Blueprint {
 		Type:     "tinytext",
 		Nullable: true,
 	}
-	b.columns = append(b.columns, col)
+	b.addOrUpdateColumn(col)
 	return b
 }
 
@@ -534,7 +548,7 @@ func (b *Blueprint) MediumText(name string) *Blueprint {
 		Type:     "mediumtext",
 		Nullable: true,
 	}
-	b.columns = append(b.columns, col)
+	b.addOrUpdateColumn(col)
 	return b
 }
 
@@ -545,7 +559,7 @@ func (b *Blueprint) LongText(name string) *Blueprint {
 		Type:     "longtext",
 		Nullable: true,
 	}
-	b.columns = append(b.columns, col)
+	b.addOrUpdateColumn(col)
 	return b
 }
 
@@ -696,11 +710,38 @@ func (fkb *ForeignKeyBuilder) OnUpdate(action string) *ForeignKeyBuilder {
 	return fkb
 }
 
+// Deferrable marks the foreign key as deferrable
+func (fkb *ForeignKeyBuilder) Deferrable() *ForeignKeyBuilder {
+	fkb.fk.Deferrable = true
+	return fkb
+}
+
+// InitiallyDeferred marks the foreign key as initially deferred
+// (only applies if Deferrable() is also called)
+func (fkb *ForeignKeyBuilder) InitiallyDeferred() *ForeignKeyBuilder {
+	fkb.fk.Deferrable = true
+	fkb.fk.InitiallyDeferred = true
+	return fkb
+}
+
 // Finish completes the foreign key definition
 func (fkb *ForeignKeyBuilder) Finish() *Blueprint {
 	fkb.fk.Column = fkb.column
 	fkb.blueprint.foreign = append(fkb.blueprint.foreign, fkb.fk)
 	return fkb.blueprint
+}
+
+// Modify methods
+
+// Modify modifies an existing column - returns a special blueprint for chaining
+func (b *Blueprint) Modify(name string) *Blueprint {
+	col := Column{
+		Name:     name,
+		Modify:   true,
+		Nullable: true, // Default nullable
+	}
+	b.columns = append(b.columns, col)
+	return b
 }
 
 // Drop methods
@@ -824,9 +865,14 @@ func (b *Blueprint) toAlterSQL() string {
 		sqls = append(sqls, sql)
 	}
 
-	// Add columns
+	// Add or modify columns
 	for _, col := range b.columns {
-		sql := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s;", b.tableName, b.columnToSQL(col))
+		var sql string
+		if col.Modify {
+			sql = b.getModifyColumnSQL(col)
+		} else {
+			sql = fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s;", b.tableName, b.columnToSQL(col))
+		}
 		sqls = append(sqls, sql)
 	}
 
@@ -851,6 +897,69 @@ func (b *Blueprint) toAlterSQL() string {
 	}
 
 	return strings.Join(sqls, "\n")
+}
+
+// getModifyColumnSQL generates the appropriate MODIFY/CHANGE column SQL for the database
+func (b *Blueprint) getModifyColumnSQL(col Column) string {
+	switch b.dbType {
+	case "mysql":
+		// MySQL uses MODIFY COLUMN
+		columnDef := b.columnToSQL(col)
+		return fmt.Sprintf("ALTER TABLE %s MODIFY COLUMN %s;", b.tableName, columnDef)
+	case "postgres":
+		// PostgreSQL requires multiple statements for different aspects
+		var stmts []string
+
+		// Type change
+		if col.Type != "" {
+			typeSQL := b.getColumnType(col)
+			stmts = append(stmts, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s TYPE %s;",
+				b.tableName, b.quoteIdentifier(col.Name), typeSQL))
+		}
+
+		// Nullable constraint - Skip for primary key columns (they must be NOT NULL)
+		// Primary keys in PostgreSQL cannot have NOT NULL dropped
+		if col.Name != "id" { // Common primary key pattern
+			if !col.Nullable {
+				stmts = append(stmts, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET NOT NULL;",
+					b.tableName, b.quoteIdentifier(col.Name)))
+			} else {
+				stmts = append(stmts, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP NOT NULL;",
+					b.tableName, b.quoteIdentifier(col.Name)))
+			}
+		}
+
+		// Default value
+		if col.Default != nil {
+			var defaultVal string
+			if str, ok := col.Default.(string); ok {
+				if strings.ToUpper(str) == "CURRENT_TIMESTAMP" {
+					defaultVal = "CURRENT_TIMESTAMP"
+				} else {
+					defaultVal = fmt.Sprintf("'%s'", strings.ReplaceAll(str, "'", "''"))
+				}
+			} else {
+				defaultVal = fmt.Sprintf("%v", col.Default)
+			}
+			stmts = append(stmts, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DEFAULT %s;",
+				b.tableName, b.quoteIdentifier(col.Name), defaultVal))
+		} else {
+			stmts = append(stmts, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP DEFAULT;",
+				b.tableName, b.quoteIdentifier(col.Name)))
+		}
+
+		return strings.Join(stmts, "\n")
+	case "sqlite":
+		// SQLite doesn't support ALTER COLUMN in earlier versions
+		// Return a comment noting that a manual migration might be needed
+		// For newer SQLite (3.26.0+), we can use GENERATED ALWAYS but for compatibility,
+		// we'll document this limitation
+		return fmt.Sprintf("-- SQLite MODIFY not natively supported. Recommendation: Use raw SQL or recreate table.\n-- To modify %s: Rename table, create new one, copy data, drop old table",
+			b.quoteIdentifier(col.Name))
+	default:
+		columnDef := b.columnToSQL(col)
+		return fmt.Sprintf("ALTER TABLE %s MODIFY COLUMN %s;", b.tableName, columnDef)
+	}
 }
 
 // columnToSQL converts a column to SQL
@@ -1142,6 +1251,14 @@ func (b *Blueprint) foreignKeyToSQL(fk ForeignKey) string {
 	}
 	if fk.OnUpdate != "" {
 		sql += " ON UPDATE " + fk.OnUpdate
+	}
+
+	// Add DEFERRABLE clause (PostgreSQL and SQLite support this)
+	if fk.Deferrable {
+		sql += " DEFERRABLE"
+		if fk.InitiallyDeferred {
+			sql += " INITIALLY DEFERRED"
+		}
 	}
 
 	return sql
