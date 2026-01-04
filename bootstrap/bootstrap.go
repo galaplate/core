@@ -53,7 +53,9 @@ func DefaultConfig() *AppConfig {
 						code = e.Code
 						message = e.Message
 					}
-					logger.Error(err)
+					logger.Error("bootstrap@DefaultConfig", map[string]any{
+                        "error": err.Error(),
+                    })
 
 					return c.Status(code).JSON(fiber.Map{
 						"success": false,

@@ -1,115 +1,196 @@
 package logger
 
 import (
-	"io"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"os"
+	"strings"
+	"sync"
 	"time"
 
 	rotatelogs "github.com/lestrrat-go/file-rotatelogs"
-	"github.com/sirupsen/logrus"
 )
 
-var Logger *logrus.Logger
+type logger struct {
+	mu     sync.Mutex
+	file   *os.File
+	level  slog.Level
+	output string
+}
+
+type logMessage struct {
+	Timestamp string         `json:"timestamp"`
+	Level     string         `json:"level"`
+	Message   string         `json:"message"`
+	Data      map[string]any `json:"additional_info,omitempty"`
+}
+
+var logInstance *logger
 
 func init() {
-	Logger = logrus.New()
-	file, err := rotatelogs.New(
-		"./storage/logs/app.%Y-%m-%d.log",
-		rotatelogs.WithLinkName("./storage/logs/app.log"),
+	logInstance = &logger{level: slog.LevelInfo}
+
+	// Get current working directory
+	cwd, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to get working directory: %v\n", err)
+		return
+	}
+
+	logsDir := cwd + "/storage/logs"
+
+	// Create storage/logs directory if it doesn't exist
+	if err := os.MkdirAll(logsDir, 0755); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to create logs directory: %v\n", err)
+		return
+	}
+
+	// Create log filename with current date
+	logFilename := fmt.Sprintf("%s/app.%s.log", logsDir, time.Now().Format("2006-01-02"))
+
+	if err := logInstance.SetFile(logFilename); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to set log file: %v\n", err)
+		return
+	}
+
+	// Initialize rotatelogs for future rotations
+	_, err = rotatelogs.New(
+		logsDir+"/app.%Y-%m-%d.log",
+		rotatelogs.WithLinkName(logsDir+"/app.log"),
 		rotatelogs.WithMaxAge(24*time.Hour),
 		rotatelogs.WithRotationTime(24*time.Hour),
 	)
-	if err == nil {
-		Logger.SetOutput(file)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to initialize rotatelogs: %v\n", err)
 	}
-	Logger.SetLevel(logrus.InfoLevel)
-	Logger.SetFormatter(&logrus.JSONFormatter{
-		PrettyPrint: false,
-	})
-
 }
 
-func SetOutput(output io.Writer) {
-	Logger.SetOutput(output)
+func (l *logger) log(level slog.Level, msg string, data map[string]any) {
+	if level < l.level {
+		return
+	}
+
+	logMessage := logMessage{
+		Timestamp: time.Now().Format(time.RFC3339),
+		Level:     level.String(),
+		Message:   msg,
+		Data:      data,
+	}
+
+	logData, err := json.Marshal(logMessage)
+	if err != nil {
+		fmt.Println("Error marshaling log message:", err)
+		return
+	}
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if l.file == nil {
+		// maybe add another way to log, I did not want to add fmt.Println since this is a TUI app
+		return
+	}
+
+	_, err = l.file.Write(logData)
+	if err != nil {
+		return
+	}
+
+	_, err = l.file.Write([]byte("\n"))
+	if err != nil {
+		return
+	}
 }
 
-func SetLevel(level logrus.Level) {
-	Logger.SetLevel(level)
+func (l *logger) SetFile(filename string) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if l.file != nil {
+		err := l.file.Close()
+		if err != nil {
+			return err
+		}
+	}
+
+	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+
+	l.file = file
+	l.output = filename
+	return nil
 }
 
-func SetFormatter(formatter logrus.Formatter) {
-	Logger.SetFormatter(formatter)
+func (l *logger) SetLevel(level slog.Level) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	l.level = level
 }
 
-func WithFields(fields logrus.Fields) *logrus.Entry {
-	return Logger.WithFields(fields)
+func SetLevel(level slog.Level) {
+	logInstance.SetLevel(level)
 }
 
-func WithField(key string, value interface{}) *logrus.Entry {
-	return Logger.WithField(key, value)
+func SetFile(filename string) error {
+	return logInstance.SetFile(filename)
 }
 
-func Debug(args ...interface{}) {
-	Logger.Debug(args...)
+func Debug(msg string, data ...map[string]any) {
+	var logData map[string]any
+	if len(data) > 0 {
+		logData = data[0]
+	}
+	logInstance.log(slog.LevelDebug, msg, logData)
 }
 
-func Debugf(format string, args ...interface{}) {
-	Logger.Debugf(format, args...)
+func Info(msg string, data ...map[string]any) {
+	var logData map[string]any
+	if len(data) > 0 {
+		logData = data[0]
+	}
+	logInstance.log(slog.LevelInfo, msg, logData)
 }
 
-func Info(args ...interface{}) {
-	Logger.Info(args...)
+func Warn(msg string, data ...map[string]any) {
+	var logData map[string]any
+	if len(data) > 0 {
+		logData = data[0]
+	}
+	logInstance.log(slog.LevelWarn, msg, logData)
 }
 
-func Infof(format string, args ...interface{}) {
-	Logger.Infof(format, args...)
+func Error(msg string, data ...map[string]any) {
+	var logData map[string]any
+	if len(data) > 0 {
+		logData = data[0]
+	}
+	logInstance.log(slog.LevelError, msg, logData)
 }
 
-func Warn(args ...interface{}) {
-	Logger.Warn(args...)
+func Fatal(msg string, data ...map[string]any) {
+	var logData map[string]any
+	if len(data) > 0 {
+		logData = data[0]
+	}
+	logInstance.log(slog.LevelError, msg, logData)
+	os.Exit(1)
 }
 
-func Warnf(format string, args ...interface{}) {
-	Logger.Warnf(format, args...)
-}
-
-func Warning(args ...interface{}) {
-	Logger.Warning(args...)
-}
-
-func Warningf(format string, args ...interface{}) {
-	Logger.Warningf(format, args...)
-}
-
-func Error(args ...interface{}) {
-	Logger.Error(args...)
-}
-
-func Errorf(format string, args ...interface{}) {
-	Logger.Errorf(format, args...)
-}
-
-func Fatal(args ...interface{}) {
-	Logger.Fatal(args...)
-}
-
-func Fatalf(format string, args ...interface{}) {
-	Logger.Fatalf(format, args...)
-}
-
-func Panic(args ...interface{}) {
-	Logger.Panic(args...)
-}
-
-func Panicf(format string, args ...interface{}) {
-	Logger.Panicf(format, args...)
-}
-
-type LogRequest struct {
-	Logger *logrus.Entry
-}
-
-func NewLogRequestWithUUID(c *logrus.Entry, requestUUID string) *LogRequest {
-	return &LogRequest{
-		Logger: c.WithField("request_uuid", requestUUID),
+func ParseLogLevel(s string) (slog.Level, error) {
+	switch strings.ToLower(s) {
+	case "debug":
+		return slog.LevelDebug, nil
+	case "info":
+		return slog.LevelInfo, nil
+	case "warn":
+		return slog.LevelWarn, nil
+	case "error":
+		return slog.LevelError, nil
+	default:
+		return slog.LevelInfo, fmt.Errorf("unknown log level %q", s)
 	}
 }

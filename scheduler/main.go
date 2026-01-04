@@ -26,7 +26,11 @@ func (s *Scheduler) RunTasks() error {
 	for name, task := range SchedulerRegistry {
 		_, err := s.AddTask(task.Handle())
 		if err != nil {
-			logger.Fatal("Failed to register scheduler:", name, err)
+			logger.Error("Scheduler@RunTasks", map[string]any{
+                "messages": "Failed to register scheduler",
+                "name": name,
+                "error": err.Error(),
+            })
 		}
 	}
 	return nil

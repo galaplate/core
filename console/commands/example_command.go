@@ -19,7 +19,9 @@ func (c *ExampleCommand) GetDescription() string {
 }
 
 func (c *ExampleCommand) Execute(args []string) error {
-	logger := logger.NewLogRequestWithUUID(logger.WithField("console", "ExampleCommand@Execute"), "console-command")
+	logger.Info("ExampleCommand@Execute", map[string]any{
+		"action": "start_commands",
+	})
 
 	fmt.Println("🚀 Running example command...")
 
@@ -33,14 +35,14 @@ func (c *ExampleCommand) Execute(args []string) error {
 	// Example: Database query
 	var userCount int64
 	if err := database.Connect.Table("users").Count(&userCount).Error; err != nil {
-		logger.Logger.Error(map[string]any{"error": err.Error(), "action": "count_users_failed"})
+		logger.Error("ExampleCommand@Execute", map[string]any{"error": err.Error(), "action": "count_users_failed"})
 		return fmt.Errorf("failed to count users: %v", err)
 	}
 
 	fmt.Printf("👥 Total users in database: %d\n", userCount)
 
 	// Example: Structured logging
-	logger.Logger.Info(map[string]any{
+	logger.Info("ExampleCommand@Execute", map[string]any{
 		"action":     "command_executed",
 		"command":    "example:demo",
 		"user_count": userCount,
