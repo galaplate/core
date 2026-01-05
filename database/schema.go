@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	config "github.com/galaplate/core/env"
+	"github.com/galaplate/core/config"
 	"github.com/galaplate/core/supports"
 	"gorm.io/gorm"
 )
@@ -19,7 +19,7 @@ type Schema struct {
 func NewSchema() *Schema {
 	return &Schema{
 		db:     Connect,
-		dbType: supports.MapPostgres(config.Get("DB_CONNECTION")),
+		dbType: supports.MapPostgres(GetDriver(config.ConfigString("database.default"))),
 	}
 }
 

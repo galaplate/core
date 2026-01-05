@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/galaplate/core/config"
 	"github.com/galaplate/core/supports"
 )
 
@@ -28,12 +29,12 @@ func (c *DbDumpCommand) Execute(args []string) error {
 		return err
 	}
 
-	dbConnection := supports.MapPostgres(os.Getenv("DB_CONNECTION"))
-	dbHost := os.Getenv("DB_HOST")
-	dbPort := os.Getenv("DB_PORT")
-	dbDatabase := os.Getenv("DB_DATABASE")
-	dbUsername := os.Getenv("DB_USERNAME")
-	dbPassword := os.Getenv("DB_PASSWORD")
+	dbConnection := supports.MapPostgres(config.ConfigString("database.default"))
+	dbHost := config.ConfigString(fmt.Sprintf("database.connections.%s.host", dbConnection))
+	dbPort := config.ConfigString(fmt.Sprintf("database.connections.%s.port", dbConnection))
+	dbDatabase := config.ConfigString(fmt.Sprintf("database.connections.%s.database", dbConnection))
+	dbUsername := config.ConfigString(fmt.Sprintf("database.connections.%s.username", dbConnection))
+	dbPassword := config.ConfigString(fmt.Sprintf("database.connections.%s.password", dbConnection))
 
 	if dbConnection == "" {
 		c.PrintError("Missing DB_CONNECTION in .env file")

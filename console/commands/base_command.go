@@ -12,6 +12,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/galaplate/core/config"
 	"github.com/galaplate/core/supports"
 )
 
@@ -232,9 +233,9 @@ func (b *BaseCommand) GetDbConnection() (string, error) {
 
 // LoadEnvVariables loads environment variables from .env file
 func (b *BaseCommand) LoadEnvVariables() error {
-	isTesting := os.Getenv("APP_ENV") == "testing"
+	appEnv := config.ConfigString("app.env")
 	envFile := ".env"
-	if isTesting {
+	if appEnv == "testing" {
 		envFile = ".env.testing"
 	}
 	file, err := os.Open(envFile)
@@ -261,20 +262,21 @@ func (b *BaseCommand) LoadEnvVariables() error {
 	return scanner.Err()
 }
 
-// BuildDatabaseURL builds database URL from environment variables
+// BuildDatabaseURL builds database URL from configuration
 func (b *BaseCommand) BuildDatabaseURL() (string, error) {
 	if err := b.LoadEnvVariables(); err != nil {
 		return "", err
 	}
 
-	dbConnection := supports.MapPostgres(strings.Trim(os.Getenv("DB_CONNECTION"), `"`))
-	dbHost := strings.Trim(os.Getenv("DB_HOST"), `"`)
-	dbPort := strings.Trim(os.Getenv("DB_PORT"), `"`)
-	dbDatabase := strings.Trim(os.Getenv("DB_DATABASE"), `"`)
-	dbUsername := strings.Trim(os.Getenv("DB_USERNAME"), `"`)
-	dbPassword := strings.Trim(os.Getenv("DB_PASSWORD"), `"`)
+	dbConnection := supports.MapPostgres(strings.Trim(config.ConfigString("database.default"), `"`))
+	dbHost := strings.Trim(config.ConfigString(fmt.Sprintf("database.connections.%s.host", dbConnection)), `"`)
+	dbPort := strings.Trim(config.ConfigString(fmt.Sprintf("database.connections.%s.port", dbConnection)), `"`)
+	dbDatabase := strings.Trim(config.ConfigString(fmt.Sprintf("database.connections.%s.database", dbConnection)), `"`)
+	dbUsername := strings.Trim(config.ConfigString(fmt.Sprintf("database.connections.%s.username", dbConnection)), `"`)
+	dbPassword := strings.Trim(config.ConfigString(fmt.Sprintf("database.connections.%s.password", dbConnection)), `"`)
+	dbDriver := strings.Trim(config.ConfigString(fmt.Sprintf("database.connections.%s.driver", dbConnection)), `"`)
 
-	switch dbConnection {
+	switch dbDriver {
 	case "sqlite":
 		if dbDatabase == "" {
 			dbDatabase = "database.sqlite"

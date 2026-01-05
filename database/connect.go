@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	config "github.com/galaplate/core/env"
+	"github.com/galaplate/core/config"
 	"github.com/galaplate/core/supports"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
@@ -78,16 +78,18 @@ func ConnectWithConfig(cfg *Config) {
 	var db *gorm.DB
 
 	// Use provided config or fall back to environment variables
-	var dbType, host, port, username, password, database string
+	var dbType, host, port, username, password, database, driver string
 
-	dbType = supports.MapPostgres(config.Get("DB_CONNECTION"))
-	host = config.Get("DB_HOST")
-	port = config.Get("DB_PORT")
-	username = config.Get("DB_USERNAME")
-	password = config.Get("DB_PASSWORD")
-	database = config.Get("DB_DATABASE")
+	dbType = supports.MapPostgres(config.ConfigString("database.default"))
 
-	switch dbType {
+	host = config.ConfigString(fmt.Sprintf("database.connections.%s.host", dbType))
+	port = config.ConfigString(fmt.Sprintf("database.connections.%s.port", dbType))
+	username = config.ConfigString(fmt.Sprintf("database.connections.%s.username", dbType))
+	password = config.ConfigString(fmt.Sprintf("database.connections.%s.password", dbType))
+	database = config.ConfigString(fmt.Sprintf("database.connections.%s.database", dbType))
+	driver = GetDriver(dbType)
+
+	switch driver {
 	case "postgres":
 		dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
 			host, port, username, password, database,
@@ -127,4 +129,8 @@ func ConnectWithConfig(cfg *Config) {
 		fmt.Println("Failed to connect to the database")
 	}
 	Connect = db
+}
+
+func GetDriver(dbType string) string {
+	return config.ConfigString(fmt.Sprintf("database.connections.%s.driver", dbType))
 }

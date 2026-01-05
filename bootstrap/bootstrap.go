@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/galaplate/core/config"
 	"github.com/galaplate/core/database"
-	config "github.com/galaplate/core/env"
 	"github.com/galaplate/core/logger"
 	"github.com/galaplate/core/queue"
 	"github.com/galaplate/core/scheduler"
@@ -26,6 +26,7 @@ type AppConfig struct {
 	GormConfig          *gorm.Config
 	FiberConfig         *fiber.Config
 	IsConsoleMode       bool
+	ConfigPath          string
 }
 
 // OptFunc is a functional option for configuring AppConfig
@@ -41,6 +42,7 @@ func DefaultConfig() *AppConfig {
 		QueueSize:           100,
 		WorkerCount:         5,
 		IsConsoleMode:       isConsoleMode,
+		ConfigPath:          "./config",
 		FiberConfig: &fiber.Config{
 			Views: html.New("./templates", ".html"),
 			ErrorHandler: func(c *fiber.Ctx, err error) error {
@@ -54,8 +56,8 @@ func DefaultConfig() *AppConfig {
 						message = e.Message
 					}
 					logger.Error("bootstrap@DefaultConfig", map[string]any{
-                        "error": err.Error(),
-                    })
+						"error": err.Error(),
+					})
 
 					return c.Status(code).JSON(fiber.Map{
 						"success": false,
@@ -81,9 +83,18 @@ func NewApp(opts ...OptFunc) *fiber.App {
 }
 
 func appWithConfig(cfg *AppConfig) *fiber.App {
-	screet := config.Get("APP_SECRET")
-	if screet == "" {
-		panic("You must generate the screet key first")
+	// Load configuration from config files
+	loader := config.NewLoader(cfg.ConfigPath)
+	configData, err := loader.Load()
+	if err != nil {
+		logger.Warn(fmt.Sprintf("Config loading warning: %v", err))
+	}
+
+	config.InitializeGlobal(configData)
+
+	secret := config.ConfigString("app.key")
+	if secret == "" {
+		panic("You must generate the secret key first")
 	}
 
 	var fiberCfg *fiber.Config

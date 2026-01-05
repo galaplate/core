@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	config "github.com/galaplate/core/env"
+	"github.com/galaplate/core/config"
 	"github.com/galaplate/core/supports"
 	"gorm.io/gorm"
 )
@@ -29,7 +29,7 @@ func NewMigrator() *Migrator {
 
 // disableForeignKeyChecks disables foreign key checks for the current database
 func (m *Migrator) disableForeignKeyChecks() error {
-	dbType := supports.MapPostgres(config.Get("DB_CONNECTION"))
+	dbType := supports.MapPostgres(GetDriver(config.ConfigString("database.default")))
 
 	switch dbType {
 	case "mysql":
@@ -47,7 +47,7 @@ func (m *Migrator) disableForeignKeyChecks() error {
 
 // enableForeignKeyChecks enables foreign key checks for the current database
 func (m *Migrator) enableForeignKeyChecks() error {
-	dbType := supports.MapPostgres(config.Get("DB_CONNECTION"))
+	dbType := supports.MapPostgres(GetDriver(config.ConfigString("database.default")))
 
 	switch dbType {
 	case "mysql":
