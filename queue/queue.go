@@ -1,6 +1,7 @@
 package queue
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -13,76 +14,135 @@ import (
 type Task func()
 
 type Queue struct {
-	tasks chan Task
-	wg    sync.WaitGroup
+	tasks           chan Task
+	wg              sync.WaitGroup
+	ctx             context.Context
+	cancel          context.CancelFunc
+	started         bool
+	mu              sync.Mutex
+	ShutdownTimeout time.Duration
 }
 
 func New(bufferSize int) *Queue {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &Queue{
-		tasks: make(chan Task, bufferSize),
+		tasks:           make(chan Task, bufferSize),
+		ctx:             ctx,
+		cancel:          cancel,
+		started:         false,
+		ShutdownTimeout: 30 * time.Second,
 	}
 }
 
 func (q *Queue) Start(workerCount int) {
+	q.mu.Lock()
+	if q.started {
+		q.mu.Unlock()
+		return
+	}
+	q.started = true
+	q.mu.Unlock()
+
 	if database.Connect.Migrator().HasTable(&models.Job{}) {
 		for range workerCount {
-			go func() {
-				for {
-					var jobRecord models.Job
-					start := time.Now()
+			q.wg.Add(1)
+			go q.worker()
+		}
+	}
+}
 
-					result := database.Connect.
-						Where("state = ? AND available_at <= ?", models.JobPending, time.Now()).
-						Order("created_at ASC").
-						First(&jobRecord)
+func (q *Queue) worker() {
+	defer q.wg.Done()
 
-					if result.Error != nil {
-						time.Sleep(1 * time.Second)
-						continue
-					}
-
-					// Increment attempts when starting the job
-					jobRecord.Attempts++
-					updateResult := database.Connect.Model(&jobRecord).
-						Where("id = ? AND state = ?", jobRecord.ID, models.JobPending).
-						Updates(models.Job{
-							State:     models.JobStarted,
-							StartedAt: &start,
-							Attempts:  jobRecord.Attempts,
-						})
-
-					if updateResult.RowsAffected == 0 {
-						continue
-					}
-
-					job, err := ResolveJob(jobRecord.Type, jobRecord.Payload)
-					if err != nil {
-						failJob(&jobRecord, err)
-						continue
-					}
-
-					err = job.Handle(jobRecord.Payload)
-
-					if err != nil {
-						if jobRecord.Attempts >= job.MaxAttempts() {
-							failJob(&jobRecord, err)
-						} else {
-							database.Connect.Model(&jobRecord).Updates(models.Job{
-								State:       models.JobPending,
-								ErrorMsg:    err.Error(),
-								AvailableAt: time.Now().Add(job.RetryAfter()),
-							})
-						}
-					} else {
-						database.Connect.Model(&jobRecord).Updates(models.Job{
-							State:      models.JobFinished,
-							FinishedAt: ptr(time.Now()),
-						})
-					}
-				}
-			}()
+	for {
+		select {
+		case <-q.ctx.Done():
+			return
+		default:
 		}
 
+		var jobRecord models.Job
+		start := time.Now()
+
+		result := database.Connect.
+			Where("state = ? AND available_at <= ?", models.JobPending, time.Now()).
+			Order("created_at ASC").
+			First(&jobRecord)
+
+		if result.Error != nil {
+			select {
+			case <-q.ctx.Done():
+				return
+			case <-time.After(1 * time.Second):
+				continue
+			}
+		}
+
+		// Increment attempts when starting the job
+		jobRecord.Attempts++
+		updateResult := database.Connect.Model(&jobRecord).
+			Where("id = ? AND state = ?", jobRecord.ID, models.JobPending).
+			Updates(models.Job{
+				State:     models.JobStarted,
+				StartedAt: &start,
+				Attempts:  jobRecord.Attempts,
+			})
+
+		if updateResult.RowsAffected == 0 {
+			continue
+		}
+
+		job, err := ResolveJob(jobRecord.Type, jobRecord.Payload)
+		if err != nil {
+			failJob(&jobRecord, err)
+			continue
+		}
+
+		err = job.Handle(jobRecord.Payload)
+
+		if err != nil {
+			if jobRecord.Attempts >= job.MaxAttempts() {
+				failJob(&jobRecord, err)
+			} else {
+				database.Connect.Model(&jobRecord).Updates(models.Job{
+					State:       models.JobPending,
+					ErrorMsg:    err.Error(),
+					AvailableAt: time.Now().Add(job.RetryAfter()),
+				})
+			}
+		} else {
+			database.Connect.Model(&jobRecord).Updates(models.Job{
+				State:      models.JobFinished,
+				FinishedAt: ptr(time.Now()),
+			})
+		}
+	}
+}
+
+// Shutdown gracefully shuts down the queue, waiting for all workers to finish
+func (q *Queue) Shutdown(ctx context.Context) error {
+	q.mu.Lock()
+	if !q.started {
+		q.mu.Unlock()
+		return nil
+	}
+	q.mu.Unlock()
+
+	// Signal all workers to stop
+	q.cancel()
+
+	// Wait for all workers to finish with timeout
+	done := make(chan struct{})
+	go func() {
+		q.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 
