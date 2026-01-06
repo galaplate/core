@@ -8,24 +8,30 @@ import (
 )
 
 // {{.StructName}} - Generated on {{.Timestamp}}
+// A queue job that handles {{.JobName}} tasks
 type {{.StructName}} struct {
 	// Add your job payload fields here
 	// Example:
 	// UserID int `json:"user_id"`
+	// Email  string `json:"email"`
 }
 
+// MaxAttempts returns the number of times this job will be retried on failure
 func (j {{.StructName}}) MaxAttempts() int {
-	return 3
+	return {{.MaxAttempts}}
 }
 
+// RetryAfter returns the duration to wait before retrying a failed job
 func (j {{.StructName}}) RetryAfter() time.Duration {
-	return 2 * time.Minute
+	return {{.RetryMinutes}} * time.Minute
 }
 
+// Type returns the job type identifier
 func ({{.StructName}}) Type() string {
 	return "{{.JobName}}"
 }
 
+// Handle processes the job with the given payload
 func (j {{.StructName}}) Handle(payload json.RawMessage) error {
 	// Unmarshal payload into struct
 	// var data {{.StructName}}
@@ -34,10 +40,16 @@ func (j {{.StructName}}) Handle(payload json.RawMessage) error {
 	// }
 
 	// TODO: Add your job logic here
+	// Example:
+	// - Send emails
+	// - Process payments
+	// - Generate reports
+	// - Clean up data
 
 	return nil
 }
 
+// init registers the job in the queue system
 func init() {
 	queue.RegisterJob({{.StructName}}{})
 }

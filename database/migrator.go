@@ -29,9 +29,9 @@ func NewMigrator() *Migrator {
 
 // disableForeignKeyChecks disables foreign key checks for the current database
 func (m *Migrator) disableForeignKeyChecks() error {
-	dbType := supports.MapPostgres(GetDriver(config.ConfigString("database.default")))
+	dbDriver := supports.MapPostgres(GetDriver(config.ConfigString("database.default")))
 
-	switch dbType {
+	switch dbDriver {
 	case "mysql":
 		return m.db.Exec("SET FOREIGN_KEY_CHECKS=0;").Error
 	case "postgres":
@@ -47,9 +47,9 @@ func (m *Migrator) disableForeignKeyChecks() error {
 
 // enableForeignKeyChecks enables foreign key checks for the current database
 func (m *Migrator) enableForeignKeyChecks() error {
-	dbType := supports.MapPostgres(GetDriver(config.ConfigString("database.default")))
+	dbDriver := supports.MapPostgres(GetDriver(config.ConfigString("database.default")))
 
-	switch dbType {
+	switch dbDriver {
 	case "mysql":
 		return m.db.Exec("SET FOREIGN_KEY_CHECKS=1;").Error
 	case "postgres":
@@ -199,7 +199,7 @@ func (m *Migrator) Up() error {
 		tx := m.db.Begin()
 
 		// Create schema with transaction
-		txSchema := &Schema{db: tx, dbType: m.schema.dbType}
+		txSchema := &Schema{db: tx, dbDriver: m.schema.dbDriver}
 
 		// Run the migration
 		if err := migration.Up(txSchema); err != nil {
@@ -250,7 +250,7 @@ func (m *Migrator) Down() error {
 		tx := m.db.Begin()
 
 		// Create schema with transaction
-		txSchema := &Schema{db: tx, dbType: m.schema.dbType}
+		txSchema := &Schema{db: tx, dbDriver: m.schema.dbDriver}
 
 		// Run the rollback
 		if err := migration.Down(txSchema); err != nil {

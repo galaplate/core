@@ -1,0 +1,37 @@
+package migrations
+
+import (
+	"github.com/galaplate/core/database"
+)
+
+type Migration{{.Timestamp}} struct {
+	database.BaseMigration
+}
+
+func init() {
+	database.Register(&Migration{{.Timestamp}}{
+		BaseMigration: database.BaseMigration{
+			Name:      "{{.Name}}",
+			Timestamp: {{.Timestamp}},
+		},
+	})
+}
+
+func (m *Migration{{.Timestamp}}) Up(schema *database.Schema) error {
+	// Add your migration code here
+	// Example:
+	// return schema.Create("users", func(table *database.Blueprint) {
+	//     table.ID()
+	//     table.String("name").NotNullable()
+	//     table.String("email").NotNullable().Unique()
+	//     table.Timestamps()
+	// })
+	return nil
+}
+
+func (m *Migration{{.Timestamp}}) Down(schema *database.Schema) error {
+	// Add your rollback code here
+	// Example:
+	// return schema.DropIfExists("users")
+	return nil
+}

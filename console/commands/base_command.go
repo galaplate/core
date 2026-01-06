@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -13,7 +12,8 @@ import (
 	"text/template"
 
 	"github.com/galaplate/core/config"
-	"github.com/galaplate/core/supports"
+	"github.com/galaplate/core/database"
+	"github.com/galaplate/core/logger"
 )
 
 // BaseCommand provides common functionality for all commands
@@ -212,23 +212,7 @@ func (b *BaseCommand) FormatStructName(name string) string {
 
 // GetDbConnection reads DB_CONNECTION from .env
 func (b *BaseCommand) GetDbConnection() (string, error) {
-	file, err := os.Open(".env")
-	if err != nil {
-		// Default to mysql if .env doesn't exist
-		return "mysql", nil
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if strings.HasPrefix(line, "DB_CONNECTION=") {
-			return strings.TrimPrefix(line, "DB_CONNECTION="), nil
-		}
-	}
-
-	// Default to mysql if not found
-	return "mysql", nil
+	return database.GetDriver(config.ConfigString("database.default")), nil
 }
 
 // LoadEnvVariables loads environment variables from .env file
@@ -260,72 +244,6 @@ func (b *BaseCommand) LoadEnvVariables() error {
 	}
 
 	return scanner.Err()
-}
-
-// BuildDatabaseURL builds database URL from configuration
-func (b *BaseCommand) BuildDatabaseURL() (string, error) {
-	if err := b.LoadEnvVariables(); err != nil {
-		return "", err
-	}
-
-	dbConnection := supports.MapPostgres(strings.Trim(config.ConfigString("database.default"), `"`))
-	dbHost := strings.Trim(config.ConfigString(fmt.Sprintf("database.connections.%s.host", dbConnection)), `"`)
-	dbPort := strings.Trim(config.ConfigString(fmt.Sprintf("database.connections.%s.port", dbConnection)), `"`)
-	dbDatabase := strings.Trim(config.ConfigString(fmt.Sprintf("database.connections.%s.database", dbConnection)), `"`)
-	dbUsername := strings.Trim(config.ConfigString(fmt.Sprintf("database.connections.%s.username", dbConnection)), `"`)
-	dbPassword := strings.Trim(config.ConfigString(fmt.Sprintf("database.connections.%s.password", dbConnection)), `"`)
-	dbDriver := strings.Trim(config.ConfigString(fmt.Sprintf("database.connections.%s.driver", dbConnection)), `"`)
-
-	switch dbDriver {
-	case "sqlite":
-		if dbDatabase == "" {
-			dbDatabase = "database.sqlite"
-		}
-		return fmt.Sprintf("sqlite:%s", dbDatabase), nil
-	case "mysql":
-		if dbHost == "" || dbPort == "" || dbDatabase == "" {
-			return "", fmt.Errorf("missing MySQL database configuration in .env file")
-		}
-		return fmt.Sprintf("mysql://%s:%s@%s:%s/%s?parseTime=true",
-			dbUsername, dbPassword, dbHost, dbPort, dbDatabase), nil
-	case "postgres":
-		if dbHost == "" || dbPort == "" || dbDatabase == "" {
-			return "", fmt.Errorf("missing PostgreSQL database configuration in .env file")
-		}
-		return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
-			dbUsername, dbPassword, dbHost, dbPort, dbDatabase), nil
-	default:
-		return "", fmt.Errorf("unsupported database driver: %s (supported: sqlite, mysql, postgres)", dbConnection)
-	}
-}
-
-// CheckDbmate checks if dbmate is installed
-func (b *BaseCommand) CheckDbmate() error {
-	_, err := exec.LookPath("dbmate")
-	if err != nil {
-		return fmt.Errorf("dbmate is not installed. Install with: go install github.com/amacneil/dbmate@latest")
-	}
-	return nil
-}
-
-// RunDbmate executes dbmate command with given arguments
-func (b *BaseCommand) RunDbmate(args ...string) error {
-	dbURL, err := b.BuildDatabaseURL()
-	if err != nil {
-		return err
-	}
-
-	migrationDir := "./db/migrations"
-	if err := os.MkdirAll(migrationDir, 0755); err != nil {
-		return fmt.Errorf("failed to create migration directory: %v", err)
-	}
-
-	cmdArgs := append([]string{"-d", migrationDir, "--url", dbURL}, args...)
-	cmd := exec.Command("dbmate", cmdArgs...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	return cmd.Run()
 }
 
 // PrintSuccess prints a success message with checkmark
@@ -534,4 +452,52 @@ func (b *BaseCommand) CopyStubToTarget(stubPath, targetPath string) error {
 	}
 
 	return nil
+}
+
+// ValidateName validates a name follows proper Go naming conventions
+// Ensures name starts with uppercase letter and contains only alphanumeric characters and underscores
+func (b *BaseCommand) ValidateName(name, itemType string) error {
+	if len(name) == 0 {
+		return fmt.Errorf("%s name cannot be empty", itemType)
+	}
+
+	if !regexp.MustCompile(`^[A-Z]`).MatchString(name) {
+		return fmt.Errorf("%s name must start with uppercase letter (e.g., %sExample, MyClass)", itemType, strings.ToUpper(itemType[:1]))
+	}
+
+	if !regexp.MustCompile(`^[a-zA-Z0-9_]+$`).MatchString(name) {
+		return fmt.Errorf("%s name must contain only letters, numbers, and underscores", itemType)
+	}
+
+	return nil
+}
+
+// FatalError prints a fatal error message to stderr, logs it, and exits
+// Useful for unrecoverable errors during command execution
+func (b *BaseCommand) FatalError(message string, err error) {
+	// Display error to stderr for immediate user visibility
+	fmt.Fprintf(os.Stderr, "❌ FATAL ERROR: %s\n", message)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "📋 Details: %v\n", err)
+	}
+
+	// Also log to logger for record keeping
+	if err != nil {
+		logger.Fatal(message, map[string]any{"error": err.Error()})
+	} else {
+		logger.Fatal(message)
+	}
+
+	os.Exit(1)
+}
+
+// TableExists checks if a table exists in the database
+// Returns true if table exists, false if it doesn't or if database is not connected
+func (b *BaseCommand) TableExists(tableName string) bool {
+	db := database.Connect
+	if db == nil {
+		return false
+	}
+
+	return db.Migrator().HasTable(tableName)
 }

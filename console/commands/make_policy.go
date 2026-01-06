@@ -45,10 +45,16 @@ func (c *PolicyCommand) Execute(args []string) error {
 	}
 
 	if len(args) == 0 {
-		policyName = c.AskRequired("Enter policy name (e.g., admin_only, user_verified)")
+		policyName = c.AskRequired("Enter policy name (e.g., AdminOnly, UserVerified)")
 	} else {
 		policyName = args[0]
 	}
+
+	// Validate policy name format (policies use PascalCase)
+	if err := c.ValidateName(policyName, "Policy"); err != nil {
+		return err
+	}
+
 	policyName = strings.ToLower(policyName)
 
 	return c.createPolicy(policyName)

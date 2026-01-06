@@ -33,6 +33,11 @@ func (c *MakeCommand) Execute(args []string) error {
 		return fmt.Errorf("command name cannot be empty")
 	}
 
+	// Validate command name format
+	if err := c.ValidateName(commandName, "Command"); err != nil {
+		return err
+	}
+
 	return c.createCommand(commandName)
 }
 
@@ -70,7 +75,7 @@ func (c *MakeCommand) createCommand(name string) error {
 		Timestamp:   time.Now().Format("2006-01-02 15:04:05"),
 		ModuleName:  moduleName,
 	}); err != nil {
-		panic(err)
+		c.FatalError("Failed to generate command from stub template", err)
 	}
 
 	fmt.Printf("✅ Command created successfully: %s\n", filePath)

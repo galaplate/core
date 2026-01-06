@@ -33,6 +33,11 @@ func (c *MakeSeederCommand) Execute(args []string) error {
 		return fmt.Errorf("seeder name cannot be empty")
 	}
 
+	// Validate seeder name format
+	if err := c.ValidateName(seederName, "Seeder"); err != nil {
+		return err
+	}
+
 	return c.createSeeder(seederName)
 }
 
@@ -41,7 +46,7 @@ func (c *MakeSeederCommand) askForSeederName() string {
 }
 
 func (c *MakeSeederCommand) createSeeder(name string) error {
-	seederDir := "./db/seeders"
+	seederDir := "db/seeders"
 
 	if err := os.MkdirAll(seederDir, 0755); err != nil {
 		return fmt.Errorf("failed to create seeders directory: %v", err)

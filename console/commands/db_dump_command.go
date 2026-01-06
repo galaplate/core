@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/galaplate/core/config"
+	"github.com/galaplate/core/database"
 	"github.com/galaplate/core/supports"
 )
 
@@ -29,20 +30,21 @@ func (c *DbDumpCommand) Execute(args []string) error {
 		return err
 	}
 
-	dbConnection := supports.MapPostgres(config.ConfigString("database.default"))
+	dbConnection := config.ConfigString("database.default")
 	dbHost := config.ConfigString(fmt.Sprintf("database.connections.%s.host", dbConnection))
 	dbPort := config.ConfigString(fmt.Sprintf("database.connections.%s.port", dbConnection))
 	dbDatabase := config.ConfigString(fmt.Sprintf("database.connections.%s.database", dbConnection))
 	dbUsername := config.ConfigString(fmt.Sprintf("database.connections.%s.username", dbConnection))
 	dbPassword := config.ConfigString(fmt.Sprintf("database.connections.%s.password", dbConnection))
+	dbDriver := supports.MapPostgres(database.GetDriver(dbConnection))
 
-	if dbConnection == "" {
+	if dbDriver == "" {
 		c.PrintError("Missing DB_CONNECTION in .env file")
 		return fmt.Errorf("missing database connection type")
 	}
 
 	// SQLite validation
-	if dbConnection == "sqlite" {
+	if dbDriver == "sqlite" {
 		if dbDatabase == "" {
 			dbDatabase = "database.sqlite"
 		}
@@ -76,7 +78,7 @@ func (c *DbDumpCommand) Execute(args []string) error {
 	c.PrintInfo(fmt.Sprintf("Dumping database '%s' to %s...", dbDatabase, filename))
 
 	var cmd *exec.Cmd
-	switch dbConnection {
+	switch dbDriver {
 	case "sqlite":
 		if err := c.checkCommand("sqlite3"); err != nil {
 			return err
