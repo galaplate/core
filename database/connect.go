@@ -78,16 +78,16 @@ func ConnectWithConfig(cfg *Config) {
 	var db *gorm.DB
 
 	// Use provided config or fall back to environment variables
-	var dbType, host, port, username, password, database, driver string
+	var dbConn, host, port, username, password, database, driver string
 
-	dbType = supports.MapPostgres(config.ConfigString("database.default"))
+	dbConn = config.ConfigString("database.default")
 
-	host = config.ConfigString(fmt.Sprintf("database.connections.%s.host", dbType))
-	port = config.ConfigString(fmt.Sprintf("database.connections.%s.port", dbType))
-	username = config.ConfigString(fmt.Sprintf("database.connections.%s.username", dbType))
-	password = config.ConfigString(fmt.Sprintf("database.connections.%s.password", dbType))
-	database = config.ConfigString(fmt.Sprintf("database.connections.%s.database", dbType))
-	driver = GetDriver(dbType)
+	host = config.ConfigString(fmt.Sprintf("database.connections.%s.host", dbConn))
+	port = config.ConfigString(fmt.Sprintf("database.connections.%s.port", dbConn))
+	username = config.ConfigString(fmt.Sprintf("database.connections.%s.username", dbConn))
+	password = config.ConfigString(fmt.Sprintf("database.connections.%s.password", dbConn))
+	database = config.ConfigString(fmt.Sprintf("database.connections.%s.database", dbConn))
+	driver = supports.MapPostgres(GetDriver(dbConn))
 
 	switch driver {
 	case "postgres":
@@ -121,16 +121,31 @@ func ConnectWithConfig(cfg *Config) {
 			cfg.GormConfig,
 		)
 	default:
-		log.Panic("Unsupported database type", dbType)
+		log.Panic("Unsupported database type", driver)
 	}
 
 	if err != nil {
 		log.Panic(err.Error())
 		fmt.Println("Failed to connect to the database")
 	}
+
+	// Apply connection pool settings from config
+	sqlDB, err := db.DB()
+	if err == nil {
+		poolSize := config.ConfigInt(fmt.Sprintf("database.connections.%s.pool_size", dbConn))
+		maxIdle := config.ConfigInt(fmt.Sprintf("database.connections.%s.max_idle_connections", dbConn))
+
+		if poolSize > 0 {
+			sqlDB.SetMaxOpenConns(poolSize)
+		}
+		if maxIdle > 0 {
+			sqlDB.SetMaxIdleConns(maxIdle)
+		}
+	}
+
 	Connect = db
 }
 
-func GetDriver(dbType string) string {
-	return config.ConfigString(fmt.Sprintf("database.connections.%s.driver", dbType))
+func GetDriver(dbConn string) string {
+	return config.ConfigString(fmt.Sprintf("database.connections.%s.driver", dbConn))
 }

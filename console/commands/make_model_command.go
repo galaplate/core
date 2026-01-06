@@ -33,6 +33,11 @@ func (c *MakeModelCommand) Execute(args []string) error {
 		return fmt.Errorf("model name cannot be empty")
 	}
 
+	// Validate model name format
+	if err := c.ValidateName(modelName, "Model"); err != nil {
+		return err
+	}
+
 	return c.createModel(modelName)
 }
 

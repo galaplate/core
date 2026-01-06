@@ -33,6 +33,11 @@ func (c *MakeDtoCommand) Execute(args []string) error {
 		return fmt.Errorf("DTO name cannot be empty")
 	}
 
+	// Validate DTO name format
+	if err := c.ValidateName(dtoName, "DTO"); err != nil {
+		return err
+	}
+
 	return c.createDto(dtoName)
 }
 

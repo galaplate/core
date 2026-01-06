@@ -34,6 +34,11 @@ func (c *MakeCronCommand) Execute(args []string) error {
 		return fmt.Errorf("cron name cannot be empty")
 	}
 
+	// Validate cron name format
+	if err := c.ValidateName(cronName, "Cron"); err != nil {
+		return err
+	}
+
 	return c.createCron(cronName, schedule)
 }
 

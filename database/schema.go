@@ -2,30 +2,32 @@ package database
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/galaplate/core/config"
+	"github.com/galaplate/core/logger"
 	"github.com/galaplate/core/supports"
 	"gorm.io/gorm"
 )
 
 // Schema provides database schema operations
 type Schema struct {
-	db     *gorm.DB
-	dbType string
+	db       *gorm.DB
+	dbDriver string
 }
 
 // NewSchema creates a new Schema instance
 func NewSchema() *Schema {
 	return &Schema{
-		db:     Connect,
-		dbType: supports.MapPostgres(GetDriver(config.ConfigString("database.default"))),
+		db:       Connect,
+		dbDriver: supports.MapPostgres(GetDriver(config.ConfigString("database.default"))),
 	}
 }
 
 // Create creates a new table
 func (s *Schema) Create(tableName string, callback func(table *Blueprint)) error {
-	blueprint := NewBlueprint(tableName, s.dbType)
+	blueprint := NewBlueprint(tableName, s.dbDriver)
 	callback(blueprint)
 
 	sql := blueprint.ToSQL()
@@ -34,7 +36,7 @@ func (s *Schema) Create(tableName string, callback func(table *Blueprint)) error
 
 // Table modifies an existing table
 func (s *Schema) Table(tableName string, callback func(table *Blueprint)) error {
-	blueprint := NewBlueprint(tableName, s.dbType)
+	blueprint := NewBlueprint(tableName, s.dbDriver)
 	blueprint.SetMode("alter")
 	callback(blueprint)
 
@@ -58,7 +60,7 @@ func (s *Schema) DropIfExists(tableName string) error {
 func (s *Schema) HasTable(tableName string) bool {
 	var count int64
 
-	switch s.dbType {
+	switch s.dbDriver {
 	case "mysql":
 		s.db.Raw("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?", tableName).Scan(&count)
 	case "postgres":
@@ -74,7 +76,7 @@ func (s *Schema) HasTable(tableName string) bool {
 func (s *Schema) HasColumn(tableName, columnName string) bool {
 	var count int64
 
-	switch s.dbType {
+	switch s.dbDriver {
 	case "mysql":
 		s.db.Raw("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?", tableName, columnName).Scan(&count)
 	case "postgres":
@@ -89,7 +91,7 @@ func (s *Schema) HasColumn(tableName, columnName string) bool {
 // Blueprint represents a table blueprint for building schema
 type Blueprint struct {
 	tableName    string
-	dbType       string
+	dbDriver     string
 	mode         string // "create" or "alter"
 	columns      []Column
 	indexes      []Index
@@ -100,10 +102,17 @@ type Blueprint struct {
 }
 
 // NewBlueprint creates a new Blueprint
-func NewBlueprint(tableName, dbType string) *Blueprint {
+func NewBlueprint(tableName, dbDriver string) *Blueprint {
+	if !slices.Contains([]string{"postgres", "mysql", "sqlite"}, dbDriver) {
+		logger.Fatal("schema@NewBlueprint", map[string]any{
+			"error":  "Unsupported driver",
+			"driver": dbDriver,
+		})
+	}
+
 	return &Blueprint{
 		tableName:    tableName,
-		dbType:       supports.MapPostgres(dbType),
+		dbDriver:     dbDriver,
 		mode:         "create",
 		columns:      []Column{},
 		indexes:      []Index{},
@@ -134,7 +143,7 @@ func (b *Blueprint) addOrUpdateColumn(col Column) {
 func (b *Blueprint) quoteIdentifier(name string) string {
 	// Check if identifier needs quoting (reserved words, special characters, etc.)
 	if b.needsQuoting(name) {
-		switch b.dbType {
+		switch b.dbDriver {
 		case "mysql":
 			return fmt.Sprintf("`%s`", name)
 		case "postgres", "sqlite":
@@ -795,7 +804,7 @@ func (b *Blueprint) toCreateSQL() string {
 
 	// Add indexes - primary keys are always inline, regular indexes are separate for PostgreSQL
 	for _, idx := range b.indexes {
-		if idx.Type == "primary" || b.dbType != "postgres" {
+		if idx.Type == "primary" || b.dbDriver != "postgres" {
 			sql.WriteString(",\n  " + b.indexToSQL(idx))
 		}
 	}
@@ -808,7 +817,7 @@ func (b *Blueprint) toCreateSQL() string {
 	sql.WriteString("\n);")
 
 	// For PostgreSQL, add separate CREATE INDEX statements for non-primary indexes
-	if b.dbType == "postgres" {
+	if b.dbDriver == "postgres" {
 		for _, idx := range b.indexes {
 			if idx.Type != "primary" {
 				var indexSQL string
@@ -835,7 +844,7 @@ func (b *Blueprint) toAlterSQL() string {
 	// Drop foreign keys
 	for _, constraint := range b.dropForeigns {
 		var sql string
-		switch b.dbType {
+		switch b.dbDriver {
 		case "mysql":
 			sql = fmt.Sprintf("ALTER TABLE %s DROP FOREIGN KEY %s;", b.tableName, b.quoteIdentifier(constraint))
 		case "postgres":
@@ -850,7 +859,7 @@ func (b *Blueprint) toAlterSQL() string {
 	// Drop indexes
 	for _, indexName := range b.dropIndexes {
 		var sql string
-		switch b.dbType {
+		switch b.dbDriver {
 		case "mysql":
 			sql = fmt.Sprintf("DROP INDEX %s ON %s;", b.quoteIdentifier(indexName), b.tableName)
 		case "postgres", "sqlite":
@@ -901,7 +910,7 @@ func (b *Blueprint) toAlterSQL() string {
 
 // getModifyColumnSQL generates the appropriate MODIFY/CHANGE column SQL for the database
 func (b *Blueprint) getModifyColumnSQL(col Column) string {
-	switch b.dbType {
+	switch b.dbDriver {
 	case "mysql":
 		// MySQL uses MODIFY COLUMN
 		columnDef := b.columnToSQL(col)
@@ -970,9 +979,13 @@ func (b *Blueprint) columnToSQL(col Column) string {
 	dbType := b.getColumnType(col)
 	parts = append(parts, dbType)
 
-	// Nullable
-	if !col.Nullable {
-		parts = append(parts, "NOT NULL")
+	// For "id" type, the database type already includes PRIMARY KEY, so skip NOT NULL
+	// PRIMARY KEY implicitly requires NOT NULL
+	if col.Type != "id" {
+		// Nullable
+		if !col.Nullable {
+			parts = append(parts, "NOT NULL")
+		}
 	}
 
 	// Default value
@@ -996,18 +1009,18 @@ func (b *Blueprint) columnToSQL(col Column) string {
 		parts = append(parts, "UNIQUE")
 	}
 
-	// Auto increment (MySQL only)
-	if col.Auto && b.dbType == "mysql" {
+	// Auto increment (MySQL only) - skip for "id" type as it's already included
+	if col.Auto && b.dbDriver == "mysql" && col.Type != "id" {
 		parts = append(parts, "AUTO_INCREMENT")
 	}
 
 	// Comment (MySQL only)
-	if col.Comment != "" && b.dbType == "mysql" {
+	if col.Comment != "" && b.dbDriver == "mysql" {
 		parts = append(parts, fmt.Sprintf("COMMENT '%s'", col.Comment))
 	}
 
 	// Add CHECK constraint for enum in PostgreSQL and SQLite
-	if col.Type == "enum" && len(col.EnumValues) > 0 && (b.dbType == "postgres" || b.dbType == "sqlite") {
+	if col.Type == "enum" && len(col.EnumValues) > 0 && (b.dbDriver == "postgres" || b.dbDriver == "sqlite") {
 		quotedValues := make([]string, len(col.EnumValues))
 		for i, v := range col.EnumValues {
 			quotedValues[i] = fmt.Sprintf("'%s'", strings.ReplaceAll(v, "'", "''"))
@@ -1170,9 +1183,9 @@ func (b *Blueprint) getColumnType(col Column) string {
 	}
 
 	if dbTypes, exists := typeMap[col.Type]; exists {
-		if dbType, exists := dbTypes[b.dbType]; exists {
+		if dbType, exists := dbTypes[b.dbDriver]; exists {
 			// Add UNSIGNED modifier for numeric types in MySQL
-			if col.Unsigned && b.dbType == "mysql" && b.isNumericType(col.Type) {
+			if col.Unsigned && b.dbDriver == "mysql" && b.isNumericType(col.Type) {
 				dbType += " UNSIGNED"
 			}
 			return dbType
@@ -1203,7 +1216,7 @@ func (b *Blueprint) getEnumType(col Column) string {
 		return "VARCHAR(255)" // fallback if no values provided
 	}
 
-	switch b.dbType {
+	switch b.dbDriver {
 	case "mysql":
 		// MySQL native ENUM: ENUM('value1', 'value2', 'value3')
 		quotedValues := make([]string, len(col.EnumValues))

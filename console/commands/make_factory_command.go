@@ -33,6 +33,11 @@ func (c *MakeFactoryCommand) Execute(args []string) error {
 		return fmt.Errorf("model name cannot be empty")
 	}
 
+	// Validate model name format
+	if err := c.ValidateName(modelName, "Factory"); err != nil {
+		return err
+	}
+
 	return c.createFactory(modelName)
 }
 
@@ -41,7 +46,7 @@ func (c *MakeFactoryCommand) askForModelName() string {
 }
 
 func (c *MakeFactoryCommand) createFactory(name string) error {
-	factoryDir := "./db/factories"
+	factoryDir := "db/factories"
 
 	if err := os.MkdirAll(factoryDir, 0755); err != nil {
 		return fmt.Errorf("failed to create factories directory: %v", err)
