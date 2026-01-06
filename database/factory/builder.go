@@ -53,4 +53,3 @@ func (f *BaseFactory[T]) CreateMany(n int) ([]T, error) {
 	}
 	return result, nil
 }
-

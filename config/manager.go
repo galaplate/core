@@ -132,7 +132,7 @@ func (m *Manager) setNested(data map[string]any, key string, value any) {
 	parts := strings.Split(key, ".")
 	current := data
 
-	for i := range len(parts)-1 {
+	for i := range len(parts) - 1 {
 		part := parts[i]
 		if _, ok := current[part]; !ok {
 			current[part] = make(map[string]any)
