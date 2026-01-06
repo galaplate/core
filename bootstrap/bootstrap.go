@@ -1,10 +1,14 @@
 package bootstrap
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/galaplate/core/config"
 	"github.com/galaplate/core/database"
@@ -27,14 +31,51 @@ type AppConfig struct {
 	FiberConfig         *fiber.Config
 	IsConsoleMode       bool
 	ConfigPath          string
+	ShutdownTimeout     time.Duration
 }
 
 // OptFunc is a functional option for configuring AppConfig
 type OptFunc func(*AppConfig)
 
+// AppInstance holds the app and its background services for lifecycle management
+type AppInstance struct {
+	Fiber     *fiber.App
+	Queue     *queue.Queue
+	Scheduler *scheduler.Scheduler
+}
+
+// Shutdown gracefully shuts down the application
+func (ai *AppInstance) Shutdown(ctx context.Context) error {
+	if err := ai.Fiber.Shutdown(); err != nil {
+		logger.Error("bootstrap@Shutdown", map[string]any{
+			"component": "fiber",
+			"error":     err.Error(),
+		})
+	}
+
+	if ai.Queue != nil {
+		if err := ai.Queue.Shutdown(ctx); err != nil {
+			logger.Error("bootstrap@Shutdown", map[string]any{
+				"component": "queue",
+				"error":     err.Error(),
+			})
+		}
+	}
+
+	if ai.Scheduler != nil {
+		if err := ai.Scheduler.Shutdown(ctx); err != nil {
+			logger.Error("bootstrap@Shutdown", map[string]any{
+				"component": "scheduler",
+				"error":     err.Error(),
+			})
+		}
+	}
+
+	return nil
+}
+
 // DefaultConfig returns default configuration
 func DefaultConfig() *AppConfig {
-	// Auto-detect console mode based on command line arguments
 	isConsoleMode := len(os.Args) > 1 && os.Args[1] == "console"
 
 	return &AppConfig{
@@ -43,6 +84,7 @@ func DefaultConfig() *AppConfig {
 		WorkerCount:         5,
 		IsConsoleMode:       isConsoleMode,
 		ConfigPath:          "./config",
+		ShutdownTimeout:     30 * time.Second,
 		FiberConfig: &fiber.Config{
 			Views: html.New("./templates", ".html"),
 			ErrorHandler: func(c *fiber.Ctx, err error) error {
@@ -72,6 +114,7 @@ func DefaultConfig() *AppConfig {
 }
 
 // NewApp creates a new Fiber app with optional configurations
+// Graceful shutdown is automatically set up when background jobs are enabled
 func NewApp(opts ...OptFunc) *fiber.App {
 	cfg := DefaultConfig()
 
@@ -79,10 +122,11 @@ func NewApp(opts ...OptFunc) *fiber.App {
 		opt(cfg)
 	}
 
-	return appWithConfig(cfg)
+	appInstance := appWithConfig(cfg)
+	return appInstance.Fiber
 }
 
-func appWithConfig(cfg *AppConfig) *fiber.App {
+func appWithConfig(cfg *AppConfig) *AppInstance {
 	// Load configuration from config files
 	loader := config.NewLoader(cfg.ConfigPath)
 	configData, err := loader.Load()
@@ -115,15 +159,46 @@ func appWithConfig(cfg *AppConfig) *fiber.App {
 		cfg.SetupRoutes(app)
 	}
 
-	// Disable background jobs when running console commands
+	appInstance := &AppInstance{
+		Fiber: app,
+	}
+
 	if cfg.StartBackgroundJobs && !cfg.IsConsoleMode {
 		q := queue.New(cfg.QueueSize)
 		q.Start(cfg.WorkerCount)
+		appInstance.Queue = q
 
 		sch := scheduler.New()
 		sch.RunTasks()
 		sch.Start()
+		appInstance.Scheduler = sch
+
+		setupGracefulShutdown(app, appInstance, cfg.ShutdownTimeout)
 	}
 
-	return app
+	return appInstance
+}
+
+// setupGracefulShutdown sets up OS signal handling for graceful shutdown
+func setupGracefulShutdown(app *fiber.App, appInstance *AppInstance, shutdownTimeout time.Duration) {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		sig := <-sigChan
+		logger.Info("Received signal: %v, starting graceful shutdown", map[string]any{
+			"signal": sig.String(),
+		})
+
+		ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer cancel()
+
+		if err := appInstance.Shutdown(ctx); err != nil {
+			logger.Error("Error during graceful shutdown", map[string]any{
+				"error": err.Error(),
+			})
+		} else {
+			logger.Info("Application shut down gracefully")
+		}
+	}()
 }

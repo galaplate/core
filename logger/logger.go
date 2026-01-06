@@ -177,6 +177,16 @@ func Fatal(msg string, data ...map[string]any) {
 		logData = data[0]
 	}
 	logInstance.log(slog.LevelError, msg, logData)
+
+	// Display error in terminal before exiting
+	fmt.Fprintf(os.Stderr, "FATAL ERROR: %s\n", msg)
+	if logData != nil && len(logData) > 0 {
+		fmt.Fprintf(os.Stderr, "📋 Details:\n")
+		for key, value := range logData {
+			fmt.Fprintf(os.Stderr, "   %s: %v\n", key, value)
+		}
+	}
+
 	os.Exit(1)
 }
 
