@@ -12,6 +12,9 @@ import (
 
 	"github.com/galaplate/core/config"
 	"github.com/galaplate/core/database"
+	"github.com/galaplate/core/file-storage"
+	fileStorageFactory "github.com/galaplate/core/file-storage/factory"
+	"github.com/galaplate/core/file-storage/providers"
 	"github.com/galaplate/core/logger"
 	"github.com/galaplate/core/queue"
 	"github.com/galaplate/core/scheduler"
@@ -155,6 +158,9 @@ func appWithConfig(cfg *AppConfig) *AppInstance {
 		database.New()
 	}
 
+	// Initialize file storage
+	initializeFileStorage()
+
 	if cfg.SetupRoutes != nil {
 		cfg.SetupRoutes(app)
 	}
@@ -177,6 +183,46 @@ func appWithConfig(cfg *AppConfig) *AppInstance {
 	}
 
 	return appInstance
+}
+
+// initializeFileStorage initializes the file storage factory with configured providers
+func initializeFileStorage() {
+	// Get filesystem driver from config (defaults to "local")
+	driver := config.ConfigString("filesystems.default")
+	if driver == "" {
+		driver = "local"
+	}
+
+	// Get max file size from config (defaults to 10MB)
+	maxSize := config.ConfigInt("filesystems.max_size")
+	if maxSize <= 0 {
+		maxSize = int(filestorage.DefaultFileUploadConfig.MaxSize)
+	}
+
+	// Get local storage path from config
+	uploadDir := config.ConfigString("filesystems.disks.local.path")
+	if uploadDir == "" {
+		uploadDir = filestorage.DefaultFileUploadConfig.UploadDir
+	}
+
+	// Create file upload configuration
+	fileConfig := filestorage.FileUploadConfig{
+		MaxSize:      int64(maxSize),
+		AllowedTypes: filestorage.DefaultFileUploadConfig.AllowedTypes,
+		UploadDir:    uploadDir,
+	}
+
+	// Initialize storage providers
+	providersMap := make(map[string]filestorage.FileStorageProvider)
+	providersMap["local"] = providers.NewLocalStorage(fileConfig)
+
+	// Initialize global factory with selected driver
+	fileStorageFactory.Initialize(driver, providersMap)
+
+	logger.Info("File storage initialized", map[string]any{
+		"driver": driver,
+		"path":   uploadDir,
+	})
 }
 
 // setupGracefulShutdown sets up OS signal handling for graceful shutdown
