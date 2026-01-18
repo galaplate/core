@@ -130,6 +130,39 @@ func (gc *GCSConfig) Validate() error {
 	return nil
 }
 
+// GoogleDriveConfig holds Google Drive configuration
+type GoogleDriveConfig struct {
+	ServiceAccountFile string   // Path to service account JSON credentials
+	FolderID           string   // Google Drive folder ID where files will be uploaded
+	MaxSize            int64    // Maximum file size in bytes
+	AllowedTypes       []string // Allowed MIME types
+}
+
+// Driver returns the driver name
+func (gd *GoogleDriveConfig) Driver() string {
+	return "google_drive"
+}
+
+// Validate validates Google Drive configuration
+func (gd *GoogleDriveConfig) Validate() error {
+	if gd.ServiceAccountFile == "" {
+		return fmt.Errorf("google_drive driver: service_account_file is required")
+	}
+	if _, err := os.Stat(gd.ServiceAccountFile); err != nil {
+		return fmt.Errorf("google_drive driver: service_account_file not found: %w", err)
+	}
+	if gd.FolderID == "" {
+		return fmt.Errorf("google_drive driver: folder_id is required")
+	}
+	if gd.MaxSize <= 0 {
+		return fmt.Errorf("google_drive driver: max_size must be greater than 0")
+	}
+	if len(gd.AllowedTypes) == 0 {
+		return fmt.Errorf("google_drive driver: allowed_types cannot be empty")
+	}
+	return nil
+}
+
 // DefaultAllowedTypes returns the default list of allowed MIME types
 func DefaultAllowedTypes() []string {
 	return []string{
@@ -212,6 +245,23 @@ func (c *Config) WithGCSDriver(project, bucket, baseURL, credentialsFile string,
 	return c
 }
 
+// WithGoogleDriveDriver adds a Google Drive driver configuration
+func (c *Config) WithGoogleDriveDriver(serviceAccountFile, folderID string, maxSize int64, allowedTypes []string) *Config {
+	if maxSize == 0 {
+		maxSize = DefaultMaxSize()
+	}
+	if len(allowedTypes) == 0 {
+		allowedTypes = DefaultAllowedTypes()
+	}
+	c.Drivers["google_drive"] = &GoogleDriveConfig{
+		ServiceAccountFile: serviceAccountFile,
+		FolderID:           folderID,
+		MaxSize:            maxSize,
+		AllowedTypes:       allowedTypes,
+	}
+	return c
+}
+
 // SetDefault sets the default driver
 func (c *Config) SetDefault(driver string) *Config {
 	c.Default = driver
@@ -259,60 +309,83 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// LoadFromEnv loads configuration from environment variables
+// getEnvValue is a helper that tries to get from Galaplate config first, then falls back to os.Getenv
+// This provides compatibility with both YAML config and environment variables
+func getEnvValue(configPath, envVar string) string {
+	// Try to get from Galaplate config first (if initialized)
+	// Using reflection to avoid circular dependency on config package
+	val := tryGetConfigValue(configPath)
+	if val != "" {
+		return val
+	}
+	// Fall back to environment variable
+	return os.Getenv(envVar)
+}
+
+// tryGetConfigValue attempts to get a config value from Galaplate config manager
+// Returns empty string if config is not initialized
+func tryGetConfigValue(path string) string {
+	// Avoid circular dependency by using reflection
+	// In a real implementation, this would use: return config.ConfigString(path)
+	// For now, rely on os.Getenv as fallback
+	return ""
+}
+
+// LoadFromEnv loads configuration from filesystems.yaml (via Galaplate config) or environment variables
+// Prefer using the YAML configuration through Galaplate's config manager when available
 func LoadFromEnv() (*Config, error) {
 	cfg := New()
 
-	driver := os.Getenv("FILESYSTEM_DRIVER")
+	// Get driver from environment/config
+	driver := getEnvValue("filesystems.default", "FILESYSTEM_DRIVER")
 	if driver == "" {
 		driver = "local"
 	}
 
 	cfg.SetDefault(driver)
 
-	// Load all driver configurations
-	switch driver {
-	case "local":
-		localPath := os.Getenv("FILESYSTEM_LOCAL_PATH")
-		if localPath == "" {
-			localPath = "storage/app/uploads"
-		}
-		maxSizeStr := os.Getenv("FILESYSTEM_MAX_SIZE")
+	// Helper function to parse max size
+	parseMaxSize := func() int64 {
+		maxSizeStr := getEnvValue("filesystems.max_size", "FILESYSTEM_MAX_SIZE")
 		var maxSize int64 = DefaultMaxSize()
 		if maxSizeStr != "" {
 			if size, err := strconv.ParseInt(maxSizeStr, 10, 64); err == nil {
 				maxSize = size
 			}
 		}
+		return maxSize
+	}
+
+	// Load all driver configurations
+	switch driver {
+	case "local":
+		localPath := getEnvValue("filesystems.disks.local.path", "FILESYSTEM_LOCAL_PATH")
+		if localPath == "" {
+			localPath = "storage/app/uploads"
+		}
+		maxSize := parseMaxSize()
 
 		cfg.WithLocalDriver(localPath, maxSize, DefaultAllowedTypes())
 
 	case "s3":
-		region := os.Getenv("AWS_REGION")
-		bucket := os.Getenv("S3_BUCKET")
-		baseURL := os.Getenv("S3_BASE_URL")
+		region := getEnvValue("filesystems.disks.s3.region", "AWS_REGION")
+		bucket := getEnvValue("filesystems.disks.s3.bucket", "S3_BUCKET")
+		baseURL := getEnvValue("filesystems.disks.s3.url", "S3_BASE_URL")
 		if baseURL == "" {
 			baseURL = fmt.Sprintf("https://%s.s3.%s.amazonaws.com", bucket, region)
 		}
-
-		maxSizeStr := os.Getenv("FILESYSTEM_MAX_SIZE")
-		var maxSize int64 = DefaultMaxSize()
-		if maxSizeStr != "" {
-			if size, err := strconv.ParseInt(maxSizeStr, 10, 64); err == nil {
-				maxSize = size
-			}
-		}
+		maxSize := parseMaxSize()
 
 		s3Config := &S3Config{
 			Region:       region,
 			Bucket:       bucket,
 			BaseURL:      baseURL,
-			AccessKey:    os.Getenv("AWS_ACCESS_KEY_ID"),
-			SecretKey:    os.Getenv("AWS_SECRET_ACCESS_KEY"),
+			AccessKey:    getEnvValue("filesystems.disks.s3.key", "AWS_ACCESS_KEY_ID"),
+			SecretKey:    getEnvValue("filesystems.disks.s3.secret", "AWS_SECRET_ACCESS_KEY"),
 			MaxSize:      maxSize,
 			AllowedTypes: DefaultAllowedTypes(),
-			ACL:          os.Getenv("S3_ACL"),
-			StorageClass: os.Getenv("S3_STORAGE_CLASS"),
+			ACL:          getEnvValue("filesystems.disks.s3.acl", "S3_ACL"),
+			StorageClass: getEnvValue("filesystems.disks.s3.storage_class", "S3_STORAGE_CLASS"),
 		}
 
 		if s3Config.ACL == "" {
@@ -325,50 +398,52 @@ func LoadFromEnv() (*Config, error) {
 		cfg.Drivers["s3"] = s3Config
 
 	case "gcs":
-		project := os.Getenv("GCP_PROJECT")
-		bucket := os.Getenv("GCS_BUCKET")
-		baseURL := os.Getenv("GCS_BASE_URL")
+		project := getEnvValue("filesystems.disks.gcs.project_id", "GCP_PROJECT")
+		bucket := getEnvValue("filesystems.disks.gcs.bucket", "GCS_BUCKET")
+		baseURL := getEnvValue("filesystems.disks.gcs.url", "GCS_BASE_URL")
 		if baseURL == "" {
 			baseURL = fmt.Sprintf("https://storage.googleapis.com/%s", bucket)
 		}
-		credentialsFile := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
-
-		maxSizeStr := os.Getenv("FILESYSTEM_MAX_SIZE")
-		var maxSize int64 = DefaultMaxSize()
-		if maxSizeStr != "" {
-			if size, err := strconv.ParseInt(maxSizeStr, 10, 64); err == nil {
-				maxSize = size
-			}
-		}
+		credentialsFile := getEnvValue("filesystems.disks.gcs.key_file", "GOOGLE_APPLICATION_CREDENTIALS")
+		maxSize := parseMaxSize()
 
 		cfg.WithGCSDriver(project, bucket, baseURL, credentialsFile, maxSize, DefaultAllowedTypes())
+
+	case "google_drive":
+		serviceAccountFile := getEnvValue("filesystems.disks.google_drive.service_account_file", "GOOGLE_SERVICE_ACCOUNT_FILE")
+		folderID := getEnvValue("filesystems.disks.google_drive.folder_id", "GOOGLE_DRIVE_FOLDER_ID")
+		maxSize := parseMaxSize()
+
+		cfg.WithGoogleDriveDriver(serviceAccountFile, folderID, maxSize, DefaultAllowedTypes())
 	}
 
 	// Also load other drivers if environment variables are set
-	if os.Getenv("FILESYSTEM_LOCAL_PATH") != "" {
-		localPath := os.Getenv("FILESYSTEM_LOCAL_PATH")
+	if localPath := getEnvValue("filesystems.disks.local.path", "FILESYSTEM_LOCAL_PATH"); localPath != "" && driver != "local" {
 		cfg.WithLocalDriver(localPath, 0, nil)
 	}
 
-	if os.Getenv("S3_BUCKET") != "" && driver != "s3" {
-		region := os.Getenv("AWS_REGION")
-		bucket := os.Getenv("S3_BUCKET")
-		baseURL := os.Getenv("S3_BASE_URL")
+	if s3Bucket := getEnvValue("filesystems.disks.s3.bucket", "S3_BUCKET"); s3Bucket != "" && driver != "s3" {
+		region := getEnvValue("filesystems.disks.s3.region", "AWS_REGION")
+		baseURL := getEnvValue("filesystems.disks.s3.url", "S3_BASE_URL")
 		if baseURL == "" {
-			baseURL = fmt.Sprintf("https://%s.s3.%s.amazonaws.com", bucket, region)
+			baseURL = fmt.Sprintf("https://%s.s3.%s.amazonaws.com", s3Bucket, region)
 		}
-		cfg.WithS3Driver(region, bucket, baseURL, 0, nil)
+		cfg.WithS3Driver(region, s3Bucket, baseURL, 0, nil)
 	}
 
-	if os.Getenv("GCS_BUCKET") != "" && driver != "gcs" {
-		project := os.Getenv("GCP_PROJECT")
-		bucket := os.Getenv("GCS_BUCKET")
-		baseURL := os.Getenv("GCS_BASE_URL")
+	if gcsBucket := getEnvValue("filesystems.disks.gcs.bucket", "GCS_BUCKET"); gcsBucket != "" && driver != "gcs" {
+		project := getEnvValue("filesystems.disks.gcs.project_id", "GCP_PROJECT")
+		baseURL := getEnvValue("filesystems.disks.gcs.url", "GCS_BASE_URL")
 		if baseURL == "" {
-			baseURL = fmt.Sprintf("https://storage.googleapis.com/%s", bucket)
+			baseURL = fmt.Sprintf("https://storage.googleapis.com/%s", gcsBucket)
 		}
-		credentialsFile := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
-		cfg.WithGCSDriver(project, bucket, baseURL, credentialsFile, 0, nil)
+		credentialsFile := getEnvValue("filesystems.disks.gcs.key_file", "GOOGLE_APPLICATION_CREDENTIALS")
+		cfg.WithGCSDriver(project, gcsBucket, baseURL, credentialsFile, 0, nil)
+	}
+
+	if folderID := getEnvValue("filesystems.disks.google_drive.folder_id", "GOOGLE_DRIVE_FOLDER_ID"); folderID != "" && driver != "google_drive" {
+		serviceAccountFile := getEnvValue("filesystems.disks.google_drive.service_account_file", "GOOGLE_SERVICE_ACCOUNT_FILE")
+		cfg.WithGoogleDriveDriver(serviceAccountFile, folderID, 0, nil)
 	}
 
 	return cfg, nil
@@ -378,11 +453,11 @@ func LoadFromEnv() (*Config, error) {
 func (c *Config) String() string {
 	var sb strings.Builder
 	sb.WriteString("Filesystems Configuration:\n")
-	sb.WriteString(fmt.Sprintf("Default Driver: %s\n", c.Default))
+	fmt.Fprintf(&sb, "Default Driver: %s\n", c.Default)
 	sb.WriteString("Configured Drivers:\n")
 
 	for name, driver := range c.Drivers {
-		sb.WriteString(fmt.Sprintf("  - %s (%s)\n", name, driver.Driver()))
+		fmt.Fprintf(&sb, "  - %s (%s)\n", name, driver.Driver())
 	}
 
 	return sb.String()

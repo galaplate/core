@@ -199,29 +199,66 @@ func initializeFileStorage() {
 		maxSize = int(filestorage.DefaultFileUploadConfig.MaxSize)
 	}
 
-	// Get local storage path from config
-	uploadDir := config.ConfigString("filesystems.disks.local.path")
-	if uploadDir == "" {
-		uploadDir = filestorage.DefaultFileUploadConfig.UploadDir
-	}
-
 	// Create file upload configuration
 	fileConfig := filestorage.FileUploadConfig{
 		MaxSize:      int64(maxSize),
 		AllowedTypes: filestorage.DefaultFileUploadConfig.AllowedTypes,
-		UploadDir:    uploadDir,
 	}
 
 	// Initialize storage providers
 	providersMap := make(map[string]filestorage.FileStorageProvider)
+
+	// Local storage provider
+	uploadDir := config.ConfigString("filesystems.disks.local.path")
+	if uploadDir == "" {
+		uploadDir = filestorage.DefaultFileUploadConfig.UploadDir
+	}
+	fileConfig.UploadDir = uploadDir
 	providersMap["local"] = providers.NewLocalStorage(fileConfig)
+
+	// S3 storage provider
+	s3Bucket := config.ConfigString("filesystems.disks.s3.bucket")
+	if s3Bucket != "" {
+		logger.Warn("S3 storage provider available but not fully integrated", map[string]any{
+			"bucket": s3Bucket,
+		})
+	}
+
+	// Google Cloud Storage provider
+	gcsBucket := config.ConfigString("filesystems.disks.gcs.bucket")
+	if gcsBucket != "" {
+		logger.Warn("Google Cloud Storage provider available but not fully integrated", map[string]any{
+			"bucket": gcsBucket,
+		})
+	}
+
+	// Google Drive storage provider
+	gdFolderID := config.ConfigString("filesystems.disks.google_drive.folder_id")
+	if gdFolderID != "" {
+		gdServiceAccountFile := config.ConfigString("filesystems.disks.google_drive.service_account_file")
+
+		gdConfig := &filestorage.FileUploadConfig{
+			MaxSize:      fileConfig.MaxSize,
+			AllowedTypes: fileConfig.AllowedTypes,
+		}
+
+		gdStorage, err := providers.NewGoogleDriveStorage(gdServiceAccountFile, gdFolderID, *gdConfig)
+		if err != nil {
+			logger.Error("Failed to initialize Google Drive storage", map[string]any{
+				"error":  err.Error(),
+				"folder": gdFolderID,
+			})
+		} else {
+			providersMap["google_drive"] = gdStorage
+		}
+	}
 
 	// Initialize global factory with selected driver
 	fileStorageFactory.Initialize(driver, providersMap)
 
 	logger.Info("File storage initialized", map[string]any{
-		"driver": driver,
-		"path":   uploadDir,
+		"driver":    driver,
+		"providers": len(providersMap),
 	})
 }
 
