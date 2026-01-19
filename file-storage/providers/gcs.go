@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 
 	filestorage "github.com/galaplate/core/file-storage"
 )
@@ -36,11 +35,12 @@ func NewGCSStorage(cfg GCSConfig) *GCSStorage {
 	}
 }
 
-// Upload stores a file to GCS and saves metadata to database
-func (gcs *GCSStorage) Upload(file *multipart.FileHeader, userID uint, db *gorm.DB) filestorage.FileUploadResult {
+// Upload stores a file to GCS and returns metadata
+// NOTE: This does NOT save to database - that's the caller's responsibility
+func (gcs *GCSStorage) Upload(file *multipart.FileHeader) filestorage.UploadMetadata {
 	// Validate file size
 	if file.Size > gcs.config.BaseConfig.MaxSize {
-		return filestorage.FileUploadResult{
+		return filestorage.UploadMetadata{
 			Error: "file_too_large",
 		}
 	}
@@ -50,7 +50,7 @@ func (gcs *GCSStorage) Upload(file *multipart.FileHeader, userID uint, db *gorm.
 	isAllowed := slices.Contains(gcs.config.BaseConfig.AllowedTypes, contentType)
 
 	if !isAllowed {
-		return filestorage.FileUploadResult{
+		return filestorage.UploadMetadata{
 			Error: "invalid_file_type",
 		}
 	}
@@ -67,7 +67,7 @@ func (gcs *GCSStorage) Upload(file *multipart.FileHeader, userID uint, db *gorm.
 	// Open file for upload
 	src, err := file.Open()
 	if err != nil {
-		return filestorage.FileUploadResult{
+		return filestorage.UploadMetadata{
 			Error: "file_open_failed",
 		}
 	}
@@ -82,104 +82,43 @@ func (gcs *GCSStorage) Upload(file *multipart.FileHeader, userID uint, db *gorm.
 	// For now, return placeholder result
 	filePath := fmt.Sprintf("%s/%s", gcs.config.BaseURL, gcsPath)
 
-	// Save file metadata to database
-	fileMetadata := FileMetadata{
-		OriginalName: file.Filename,
-		FileName:     fileName,
-		FilePath:     filePath,
-		FileSize:     file.Size,
-		MimeType:     contentType,
-		UploadedBy:   userID,
-	}
-
-	if err := db.Table("file_uploads").Create(map[string]interface{}{
-		"original_name": fileMetadata.OriginalName,
-		"file_name":     fileMetadata.FileName,
-		"file_path":     fileMetadata.FilePath,
-		"file_size":     fileMetadata.FileSize,
-		"mime_type":     fileMetadata.MimeType,
-		"uploaded_by":   fileMetadata.UploadedBy,
-	}).Error; err != nil {
-		// TODO: Delete from GCS if database save fails
-		return filestorage.FileUploadResult{
-			Error: "database_save_failed",
-		}
-	}
-
-	return filestorage.FileUploadResult{
-		FileUpload: &fileMetadata,
+	// Return metadata only - caller is responsible for saving to database
+	storageType := "gcs"
+	return filestorage.UploadMetadata{
+		FileName:    fileName,
+		FilePath:    filePath,
+		FileSize:    file.Size,
+		MimeType:    contentType,
+		StorageType: storageType,
 	}
 }
 
-// Delete removes a file from GCS and database
-func (gcs *GCSStorage) Delete(fileID uint, userID uint, db *gorm.DB) error {
-	var fileData map[string]interface{}
-	if err := db.Table("file_uploads").First(&fileData, fileID).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return fmt.Errorf("file_not_found")
-		}
-		return fmt.Errorf("database_error")
-	}
-
-	// Check if user owns the file
-	uploadedBy, ok := fileData["uploaded_by"].(uint)
-	if !ok {
-		if val, ok := fileData["uploaded_by"].(int); ok {
-			uploadedBy = uint(val)
-		} else {
-			return fmt.Errorf("invalid_file_data")
-		}
-	}
-
-	if uploadedBy != userID {
-		return fmt.Errorf("forbidden")
+// Delete removes a file from GCS
+// NOTE: This does NOT delete from database - that's the caller's responsibility
+func (gcs *GCSStorage) Delete(filePath string, storageType string) error {
+	if filePath == "" {
+		return fmt.Errorf("invalid_file_path")
 	}
 
 	// TODO: Delete from GCS using gcsClient
-	// filePath, ok := fileData["file_path"].(string)
-	// Extract GCS path from filePath and delete
+	// Example:
+	// ctx := context.Background()
+	// err := gcs.config.Client.Bucket(gcs.config.BucketName).Object(gcsPath).Delete(ctx)
 
-	// Delete from database
-	if err := db.Table("file_uploads").Delete(map[string]interface{}{"id": fileID}).Error; err != nil {
-		return fmt.Errorf("database_delete_failed")
-	}
-
+	// For now, just return success (implement when GCS SDK is available)
 	return nil
 }
 
-// GetFileByID retrieves file metadata by ID
-func (gcs *GCSStorage) GetFileByID(fileID uint, db *gorm.DB) (any, error) {
-	var fileData map[string]interface{}
-	if err := db.Table("file_uploads").First(&fileData, fileID).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return nil, fmt.Errorf("file_not_found")
-		}
-		return nil, fmt.Errorf("database_error")
-	}
-
-	return fileData, nil
-}
-
 // ValidateFileExists checks if file exists in GCS
-func (gcs *GCSStorage) ValidateFileExists(fileUpload any) bool {
+func (gcs *GCSStorage) ValidateFileExists(metadata filestorage.UploadMetadata) bool {
 	// TODO: Implement GCS HEAD request to verify file exists
 	return true
 }
 
-// GetDownloadPath returns the GCS signed URL for download
-func (gcs *GCSStorage) GetDownloadPath(fileUpload any) string {
-	fileData, ok := fileUpload.(map[string]interface{})
-	if !ok {
-		return ""
-	}
-
+// GetDownloadURL returns the GCS signed URL for download
+func (gcs *GCSStorage) GetDownloadURL(metadata filestorage.UploadMetadata) string {
 	// TODO: Generate signed URL when GCS client is available
-	filePath, ok := fileData["file_path"].(string)
-	if !ok {
-		return ""
-	}
-
-	return filePath
+	return metadata.FilePath
 }
 
 // GetProviderName returns the provider name

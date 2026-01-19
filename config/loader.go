@@ -99,9 +99,9 @@ func (l *Loader) processEnvVariables(content string) string {
 		varPart := result[idx+2 : endIdx]
 		var varName, defaultValue string
 
-		if colonIdx := strings.Index(varPart, ":"); colonIdx != -1 {
-			varName = varPart[:colonIdx]
-			defaultValue = varPart[colonIdx+1:]
+		if before, after, ok := strings.Cut(varPart, ":"); ok {
+			varName = before
+			defaultValue = after
 		} else {
 			varName = varPart
 		}

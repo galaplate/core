@@ -11,7 +11,6 @@ import (
 
 	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/option"
-	"gorm.io/gorm"
 
 	filestorage "github.com/galaplate/core/file-storage"
 	"github.com/google/uuid"
@@ -58,11 +57,12 @@ func NewGoogleDriveStorage(serviceAccountJSON string, folderID string, config ..
 	}, nil
 }
 
-// Upload stores a file on Google Drive and saves metadata to database
-func (gd *GoogleDriveStorage) Upload(file *multipart.FileHeader, userID uint, db *gorm.DB) filestorage.FileUploadResult {
+// Upload stores a file on Google Drive and returns metadata
+// NOTE: This does NOT save to database - that's the caller's responsibility
+func (gd *GoogleDriveStorage) Upload(file *multipart.FileHeader) filestorage.UploadMetadata {
 	// Validate file size
 	if file.Size > gd.config.MaxSize {
-		return filestorage.FileUploadResult{
+		return filestorage.UploadMetadata{
 			Error: "file_too_large",
 		}
 	}
@@ -72,7 +72,7 @@ func (gd *GoogleDriveStorage) Upload(file *multipart.FileHeader, userID uint, db
 	isAllowed := slices.Contains(gd.config.AllowedTypes, contentType)
 
 	if !isAllowed {
-		return filestorage.FileUploadResult{
+		return filestorage.UploadMetadata{
 			Error: "invalid_file_type",
 		}
 	}
@@ -86,7 +86,7 @@ func (gd *GoogleDriveStorage) Upload(file *multipart.FileHeader, userID uint, db
 	// Open file
 	src, err := file.Open()
 	if err != nil {
-		return filestorage.FileUploadResult{
+		return filestorage.UploadMetadata{
 			Error: "file_open_failed",
 		}
 	}
@@ -114,80 +114,27 @@ func (gd *GoogleDriveStorage) Upload(file *multipart.FileHeader, userID uint, db
 		Do()
 
 	if err != nil {
-		return filestorage.FileUploadResult{
+		return filestorage.UploadMetadata{
 			Error: "google_drive_upload_failed",
 		}
 	}
 
-	// Create file metadata for database
-	fileMetadata := FileMetadata{
-		OriginalName: file.Filename,
-		FileName:     fileName,
-		FilePath:     res.Id, // Store Google Drive file ID as path
-		FileSize:     file.Size,
-		MimeType:     contentType,
-		UploadedBy:   userID,
-	}
-
-	// Add custom field for Google Drive URL
-	fileMetadataWithURL := map[string]interface{}{
-		"original_name":    fileMetadata.OriginalName,
-		"file_name":        fileMetadata.FileName,
-		"file_path":        fileMetadata.FilePath,
-		"file_size":        fileMetadata.FileSize,
-		"mime_type":        fileMetadata.MimeType,
-		"uploaded_by":      fileMetadata.UploadedBy,
-		"storage_type":     "google_drive",
-		"google_drive_id":  res.Id,
-		"google_drive_url": res.WebViewLink,
-		"download_url":     res.WebContentLink,
-	}
-
-	// Save file info to database
-	if err := db.Table("file_uploads").Create(fileMetadataWithURL).Error; err != nil {
-		// Try to delete from Google Drive if database save fails
-		deleteCtx, deleteCancel := context.WithTimeout(gd.ctx, 30*time.Second)
-		gd.service.Files.Delete(res.Id).Context(deleteCtx).Do()
-		deleteCancel()
-
-		return filestorage.FileUploadResult{
-			Error: "database_save_failed",
-		}
-	}
-
-	// Return the metadata with Google Drive info
-	return filestorage.FileUploadResult{
-		FileUpload: &fileMetadata,
+	// Return metadata only - caller is responsible for saving to database
+	storageType := "google_drive"
+	return filestorage.UploadMetadata{
+		FileName:      fileName,
+		FilePath:      res.Id, // Store Google Drive file ID as path
+		FileSize:      file.Size,
+		MimeType:      contentType,
+		StorageType:   storageType,
+		GoogleDriveID: &res.Id,
 	}
 }
 
-// Delete removes a file from Google Drive and its database record
-func (gd *GoogleDriveStorage) Delete(fileID uint, userID uint, db *gorm.DB) error {
-	var fileData map[string]interface{}
-	if err := db.Table("file_uploads").First(&fileData, fileID).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return fmt.Errorf("file_not_found")
-		}
-		return fmt.Errorf("database_error")
-	}
-
-	// Check if user owns the file
-	uploadedBy, ok := fileData["uploaded_by"].(uint)
-	if !ok {
-		if val, ok := fileData["uploaded_by"].(int); ok {
-			uploadedBy = uint(val)
-		} else {
-			return fmt.Errorf("invalid_file_data")
-		}
-	}
-
-	if uploadedBy != userID {
-		return fmt.Errorf("forbidden")
-	}
-
-	// Get Google Drive file ID
-	filePath, ok := fileData["file_path"].(string)
-	if !ok {
+// Delete removes a file from Google Drive
+// NOTE: This does NOT delete from database - that's the caller's responsibility
+func (gd *GoogleDriveStorage) Delete(filePath string, storageType string) error {
+	if filePath == "" {
 		return fmt.Errorf("invalid_file_path")
 	}
 
@@ -196,70 +143,35 @@ func (gd *GoogleDriveStorage) Delete(fileID uint, userID uint, db *gorm.DB) erro
 	defer cancel()
 
 	if err := gd.service.Files.Delete(filePath).Context(ctx).Do(); err != nil {
-		// Log the error but continue with database deletion
-		fmt.Printf("warning: failed to delete from Google Drive: %v\n", err)
-	}
-
-	// Delete from database
-	if err := db.Table("file_uploads").Delete(map[string]interface{}{"id": fileID}).Error; err != nil {
-		return fmt.Errorf("database_delete_failed")
+		return fmt.Errorf("google_drive_delete_failed: %w", err)
 	}
 
 	return nil
 }
 
-// GetFileByID retrieves file metadata by ID
-func (gd *GoogleDriveStorage) GetFileByID(fileID uint, db *gorm.DB) (any, error) {
-	var fileData map[string]interface{}
-	if err := db.Table("file_uploads").First(&fileData, fileID).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return nil, fmt.Errorf("file_not_found")
-		}
-		return nil, fmt.Errorf("database_error")
-	}
-
-	return fileData, nil
-}
-
 // ValidateFileExists checks if a file exists on Google Drive
-func (gd *GoogleDriveStorage) ValidateFileExists(fileUpload any) bool {
-	fileData, ok := fileUpload.(map[string]interface{})
-	if !ok {
-		return false
-	}
-
-	filePath, ok := fileData["file_path"].(string)
-	if !ok {
+func (gd *GoogleDriveStorage) ValidateFileExists(metadata filestorage.UploadMetadata) bool {
+	if metadata.FilePath == "" {
 		return false
 	}
 
 	ctx, cancel := context.WithTimeout(gd.ctx, 10*time.Second)
 	defer cancel()
 
-	_, err := gd.service.Files.Get(filePath).Fields("id").Context(ctx).Do()
+	_, err := gd.service.Files.Get(metadata.FilePath).Fields("id").Context(ctx).Do()
 	return err == nil
 }
 
-// GetDownloadPath returns the download URL for Google Drive files
-func (gd *GoogleDriveStorage) GetDownloadPath(fileUpload any) string {
-	fileData, ok := fileUpload.(map[string]interface{})
-	if !ok {
-		return ""
-	}
-
-	// Try to get direct download URL first
-	if downloadURL, ok := fileData["download_url"].(string); ok && downloadURL != "" {
-		return downloadURL
-	}
-
-	// Fall back to Google Drive file ID
-	filePath, ok := fileData["file_path"].(string)
-	if !ok {
+// GetDownloadURL returns the download URL for Google Drive files
+func (gd *GoogleDriveStorage) GetDownloadURL(metadata filestorage.UploadMetadata) string {
+	// Google Drive provides direct download URL in metadata
+	// Using file ID as backup method
+	if metadata.FilePath == "" {
 		return ""
 	}
 
 	// Return Google Drive direct download URL
-	return fmt.Sprintf("https://drive.google.com/uc?id=%s&export=download", filePath)
+	return fmt.Sprintf("https://drive.google.com/uc?id=%s&export=download", metadata.FilePath)
 }
 
 // GetProviderName returns the provider name

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 
 	filestorage "github.com/galaplate/core/file-storage"
 )
@@ -38,11 +37,12 @@ func NewS3Storage(cfg S3Config) *S3Storage {
 	}
 }
 
-// Upload stores a file to S3 and saves metadata to database
-func (s3 *S3Storage) Upload(file *multipart.FileHeader, userID uint, db *gorm.DB) filestorage.FileUploadResult {
+// Upload stores a file to S3 and returns metadata
+// NOTE: This does NOT save to database - that's the caller's responsibility
+func (s3 *S3Storage) Upload(file *multipart.FileHeader) filestorage.UploadMetadata {
 	// Validate file size
 	if file.Size > s3.config.BaseConfig.MaxSize {
-		return filestorage.FileUploadResult{
+		return filestorage.UploadMetadata{
 			Error: "file_too_large",
 		}
 	}
@@ -52,7 +52,7 @@ func (s3 *S3Storage) Upload(file *multipart.FileHeader, userID uint, db *gorm.DB
 	isAllowed := slices.Contains(s3.config.BaseConfig.AllowedTypes, contentType)
 
 	if !isAllowed {
-		return filestorage.FileUploadResult{
+		return filestorage.UploadMetadata{
 			Error: "invalid_file_type",
 		}
 	}
@@ -69,7 +69,7 @@ func (s3 *S3Storage) Upload(file *multipart.FileHeader, userID uint, db *gorm.DB
 	// Open file for upload
 	src, err := file.Open()
 	if err != nil {
-		return filestorage.FileUploadResult{
+		return filestorage.UploadMetadata{
 			Error: "file_open_failed",
 		}
 	}
@@ -83,104 +83,45 @@ func (s3 *S3Storage) Upload(file *multipart.FileHeader, userID uint, db *gorm.DB
 	// For now, return placeholder result
 	filePath := fmt.Sprintf("%s/%s", s3.config.BaseURL, s3Key)
 
-	// Save file metadata to database
-	fileMetadata := FileMetadata{
-		OriginalName: file.Filename,
-		FileName:     fileName,
-		FilePath:     filePath,
-		FileSize:     file.Size,
-		MimeType:     contentType,
-		UploadedBy:   userID,
-	}
-
-	if err := db.Table("file_uploads").Create(map[string]interface{}{
-		"original_name": fileMetadata.OriginalName,
-		"file_name":     fileMetadata.FileName,
-		"file_path":     fileMetadata.FilePath,
-		"file_size":     fileMetadata.FileSize,
-		"mime_type":     fileMetadata.MimeType,
-		"uploaded_by":   fileMetadata.UploadedBy,
-	}).Error; err != nil {
-		// TODO: Delete from S3 if database save fails
-		return filestorage.FileUploadResult{
-			Error: "database_save_failed",
-		}
-	}
-
-	return filestorage.FileUploadResult{
-		FileUpload: &fileMetadata,
+	// Return metadata only - caller is responsible for saving to database
+	storageType := "s3"
+	return filestorage.UploadMetadata{
+		FileName:    fileName,
+		FilePath:    filePath,
+		FileSize:    file.Size,
+		MimeType:    contentType,
+		StorageType: storageType,
 	}
 }
 
-// Delete removes a file from S3 and database
-func (s3 *S3Storage) Delete(fileID uint, userID uint, db *gorm.DB) error {
-	var fileData map[string]interface{}
-	if err := db.Table("file_uploads").First(&fileData, fileID).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return fmt.Errorf("file_not_found")
-		}
-		return fmt.Errorf("database_error")
-	}
-
-	// Check if user owns the file
-	uploadedBy, ok := fileData["uploaded_by"].(uint)
-	if !ok {
-		if val, ok := fileData["uploaded_by"].(int); ok {
-			uploadedBy = uint(val)
-		} else {
-			return fmt.Errorf("invalid_file_data")
-		}
-	}
-
-	if uploadedBy != userID {
-		return fmt.Errorf("forbidden")
+// Delete removes a file from S3
+// NOTE: This does NOT delete from database - that's the caller's responsibility
+func (s3 *S3Storage) Delete(filePath string, storageType string) error {
+	if filePath == "" {
+		return fmt.Errorf("invalid_file_path")
 	}
 
 	// TODO: Delete from S3 using s3Client
-	// filePath, ok := fileData["file_path"].(string)
-	// Extract S3 key from filePath and delete
+	// Example:
+	// _, err := s3.config.S3Client.DeleteObject(ctx, &s3.DeleteObjectInput{
+	//     Bucket: aws.String(s3.config.BucketName),
+	//     Key:    aws.String(s3Key),
+	// })
 
-	// Delete from database
-	if err := db.Table("file_uploads").Delete(map[string]interface{}{"id": fileID}).Error; err != nil {
-		return fmt.Errorf("database_delete_failed")
-	}
-
+	// For now, just return success (implement when AWS SDK is available)
 	return nil
 }
 
-// GetFileByID retrieves file metadata by ID
-func (s3 *S3Storage) GetFileByID(fileID uint, db *gorm.DB) (any, error) {
-	var fileData map[string]interface{}
-	if err := db.Table("file_uploads").First(&fileData, fileID).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return nil, fmt.Errorf("file_not_found")
-		}
-		return nil, fmt.Errorf("database_error")
-	}
-
-	return fileData, nil
-}
-
 // ValidateFileExists checks if file exists in S3
-func (s3 *S3Storage) ValidateFileExists(fileUpload any) bool {
+func (s3 *S3Storage) ValidateFileExists(metadata filestorage.UploadMetadata) bool {
 	// TODO: Implement S3 HEAD request to verify file exists
 	return true
 }
 
-// GetDownloadPath returns the S3 presigned URL for download
-func (s3 *S3Storage) GetDownloadPath(fileUpload any) string {
-	fileData, ok := fileUpload.(map[string]interface{})
-	if !ok {
-		return ""
-	}
-
+// GetDownloadURL returns the S3 presigned URL for download
+func (s3 *S3Storage) GetDownloadURL(metadata filestorage.UploadMetadata) string {
 	// TODO: Generate presigned URL when S3 client is available
-	filePath, ok := fileData["file_path"].(string)
-	if !ok {
-		return ""
-	}
-
-	return filePath
+	return metadata.FilePath
 }
 
 // GetProviderName returns the provider name

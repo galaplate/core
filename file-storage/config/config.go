@@ -5,6 +5,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/galaplate/core/supports"
 )
 
 // Config holds all filesystem configuration
@@ -325,6 +327,7 @@ func getEnvValue(configPath, envVar string) string {
 // tryGetConfigValue attempts to get a config value from Galaplate config manager
 // Returns empty string if config is not initialized
 func tryGetConfigValue(path string) string {
+	supports.DD(path)
 	// Avoid circular dependency by using reflection
 	// In a real implementation, this would use: return config.ConfigString(path)
 	// For now, rely on os.Getenv as fallback
@@ -338,6 +341,7 @@ func LoadFromEnv() (*Config, error) {
 
 	// Get driver from environment/config
 	driver := getEnvValue("filesystems.default", "FILESYSTEM_DRIVER")
+	supports.DD(driver)
 	if driver == "" {
 		driver = "local"
 	}

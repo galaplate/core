@@ -2,32 +2,47 @@ package filestorage
 
 import (
 	"mime/multipart"
-
-	"gorm.io/gorm"
 )
 
+// UploadMetadata contains file upload metadata returned by the storage provider
+// This is what the provider returns after uploading a file
+type UploadMetadata struct {
+	FileName      string  // Sanitized filename (generated)
+	FilePath      string  // Disk path or cloud identifier
+	FileSize      int64   // File size in bytes
+	MimeType      string  // MIME type of the file
+	StorageType   string  // 'local', 'google_drive', 's3', 'gcs'
+	GoogleDriveID *string // Google Drive file ID (if using Google Drive)
+	Error         string  // Error message if upload failed
+}
+
 // FileUploadResult represents the result of a file upload operation
+// Deprecated: Use UploadMetadata instead
 type FileUploadResult struct {
 	FileUpload any // Generic file upload model (can be from any package)
 	Error      string
 }
 
 // FileStorageProvider defines the interface for file storage implementations
+// v2.0: Decoupled - providers only handle storage, not database operations
 type FileStorageProvider interface {
-	// Upload stores a file and returns FileUploadResult
-	Upload(file *multipart.FileHeader, userID uint, db *gorm.DB) FileUploadResult
+	// Upload stores a file to the storage provider (disk/cloud)
+	// Returns metadata only - does NOT save to database
+	// The caller is responsible for saving the metadata to database if needed
+	Upload(file *multipart.FileHeader) UploadMetadata
 
-	// Delete removes a file and its database record
-	Delete(fileID uint, userID uint, db *gorm.DB) error
+	// Delete removes a file from the storage provider
+	// filePath: The file path or identifier (returned from Upload)
+	// storageType: The storage type ('local', 'google_drive', etc.)
+	Delete(filePath string, storageType string) error
 
-	// GetFileByID retrieves file metadata by ID
-	GetFileByID(fileID uint, db *gorm.DB) (any, error)
+	// GetDownloadURL returns a URL/path for downloading the file
+	// metadata: The UploadMetadata returned from Upload
+	GetDownloadURL(metadata UploadMetadata) string
 
 	// ValidateFileExists checks if a file exists in storage
-	ValidateFileExists(fileUpload any) bool
-
-	// GetDownloadPath returns the path/URL for file download
-	GetDownloadPath(fileUpload any) string
+	// metadata: The UploadMetadata returned from Upload
+	ValidateFileExists(metadata UploadMetadata) bool
 
 	// GetProviderName returns the name of the storage provider
 	GetProviderName() string
