@@ -51,12 +51,13 @@ Environment Variables:
 
 	# AWS S3
 	AWS_REGION=ap-southeast-1
-	S3_BUCKET=my-bucket
-	S3_BASE_URL=https://my-bucket.s3.amazonaws.com
+	AWS_BUCKET=my-bucket
+	AWS_BASE_URL=https://my-bucket.s3.amazonaws.com
 	AWS_ACCESS_KEY_ID=your-key
 	AWS_SECRET_ACCESS_KEY=your-secret
-	S3_ACL=private
-	S3_STORAGE_CLASS=INTELLIGENT_TIERING
+	AWS_ACL=private
+	AWS_STORAGE_CLASS=INTELLIGENT_TIERING
+	AWS_PATH_PREFIX=uploads  # S3 key prefix (default: "uploads")
 
 	# Google Cloud Storage
 	GCP_PROJECT=my-project
@@ -178,8 +179,8 @@ In your main.go:
 		case "production":
 			cfg.WithS3Driver(
 				os.Getenv("AWS_REGION"),
-				os.Getenv("S3_BUCKET"),
-				os.Getenv("S3_BASE_URL"),
+				os.Getenv("AWS_BUCKET"),
+				os.Getenv("AWS_BASE_URL"),
 				0, nil,
 			).SetDefault("s3")
 
@@ -230,11 +231,11 @@ In your main.go:
 		SetDefault("local")
 
 	// Try to add S3 if credentials available
-	if os.Getenv("S3_BUCKET") != "" {
+	if os.Getenv("AWS_BUCKET") != "" {
 		cfg.WithS3Driver(
 			os.Getenv("AWS_REGION"),
-			os.Getenv("S3_BUCKET"),
-			os.Getenv("S3_BASE_URL"),
+			os.Getenv("AWS_BUCKET"),
+			os.Getenv("AWS_BASE_URL"),
 			0, nil,
 		)
 	}
@@ -298,15 +299,15 @@ AWS_REGION
   Required for: S3 driver
   Example: AWS_REGION=ap-southeast-1
 
-S3_BUCKET
+AWS_BUCKET
   Description: S3 bucket name
   Required for: S3 driver
-  Example: S3_BUCKET=my-bucket
+  Example: AWS_BUCKET=my-bucket
 
-S3_BASE_URL
+AWS_BASE_URL
   Description: Base URL for S3 file downloads
   Default: https://{bucket}.s3.{region}.amazonaws.com
-  Example: S3_BASE_URL=https://cdn.example.com
+  Example: AWS_BASE_URL=https://cdn.example.com
 
 AWS_ACCESS_KEY_ID
   Description: AWS access key for S3
@@ -318,17 +319,23 @@ AWS_SECRET_ACCESS_KEY
   Required for: S3 driver
   Example: AWS_SECRET_ACCESS_KEY=...
 
-S3_ACL
+AWS_ACL
   Description: S3 object ACL
   Default: "private"
   Values: "private", "public-read", etc.
-  Example: S3_ACL=private
+  Example: AWS_ACL=private
 
-S3_STORAGE_CLASS
+AWS_STORAGE_CLASS
   Description: S3 storage class
   Default: "STANDARD"
   Values: "STANDARD", "INTELLIGENT_TIERING", etc.
-  Example: S3_STORAGE_CLASS=INTELLIGENT_TIERING
+  Example: AWS_STORAGE_CLASS=INTELLIGENT_TIERING
+
+AWS_PATH_PREFIX
+  Description: Path prefix for S3 keys
+  Default: "uploads"
+  Example: AWS_PATH_PREFIX=production/files
+  Note: Files will be stored at: s3://bucket/{prefix}/filename.ext
 
 GCP_PROJECT
   Description: GCP project ID

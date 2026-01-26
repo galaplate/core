@@ -12,40 +12,33 @@ import (
 	filestorage "github.com/galaplate/core/file-storage"
 )
 
-// GCSConfig holds Google Cloud Storage-specific configuration
 type GCSConfig struct {
-	BaseConfig filestorage.FileUploadConfig
-	Client     interface{} // *storage.Client - use interface to avoid SDK dependency
-	BucketName string
-	ProjectID  string
-	BaseURL    string
+	BaseConfig          filestorage.FileUploadConfig
+	Client              any // *storage.Client - use interface to avoid SDK dependency
+	BucketName          string
+	ProjectID           string
+	BaseURL             string
+	PathPrefix          string        // Path prefix for GCS objects (e.g., "uploads", "files/documents")
+	SignedURLExpiration time.Duration // Expiration duration for signed URLs (default: 15 minutes)
 }
 
-// GCSStorage implements FileStorageProvider for Google Cloud Storage
 type GCSStorage struct {
 	config GCSConfig
 }
 
-// NewGCSStorage creates a new Google Cloud Storage provider
-// Note: Client should be *storage.Client from cloud.google.com/go/storage
-// Using interface{} to avoid forcing the SDK dependency
 func NewGCSStorage(cfg GCSConfig) *GCSStorage {
 	return &GCSStorage{
 		config: cfg,
 	}
 }
 
-// Upload stores a file to GCS and returns metadata
-// NOTE: This does NOT save to database - that's the caller's responsibility
 func (gcs *GCSStorage) Upload(file *multipart.FileHeader) filestorage.UploadMetadata {
-	// Validate file size
 	if file.Size > gcs.config.BaseConfig.MaxSize {
 		return filestorage.UploadMetadata{
 			Error: "file_too_large",
 		}
 	}
 
-	// Validate file type
 	contentType := file.Header.Get("Content-Type")
 	isAllowed := slices.Contains(gcs.config.BaseConfig.AllowedTypes, contentType)
 
@@ -55,16 +48,18 @@ func (gcs *GCSStorage) Upload(file *multipart.FileHeader) filestorage.UploadMeta
 		}
 	}
 
-	// Generate unique filename
 	ext := filepath.Ext(file.Filename)
 	uniqueID := uuid.New().String()
 	timestamp := time.Now().Format("20060102150405")
 	fileName := fmt.Sprintf("%s_%s%s", timestamp, uniqueID, ext)
 
-	// Create GCS object path
-	gcsPath := fmt.Sprintf("uploads/%s", fileName)
+	// Create GCS path with configurable prefix
+	pathPrefix := gcs.config.PathPrefix
+	if pathPrefix == "" {
+		pathPrefix = "uploads" // Default prefix
+	}
+	gcsPath := fmt.Sprintf("%s/%s", pathPrefix, fileName)
 
-	// Open file for upload
 	src, err := file.Open()
 	if err != nil {
 		return filestorage.UploadMetadata{
@@ -82,7 +77,6 @@ func (gcs *GCSStorage) Upload(file *multipart.FileHeader) filestorage.UploadMeta
 	// For now, return placeholder result
 	filePath := fmt.Sprintf("%s/%s", gcs.config.BaseURL, gcsPath)
 
-	// Return metadata only - caller is responsible for saving to database
 	storageType := "gcs"
 	return filestorage.UploadMetadata{
 		FileName:    fileName,
@@ -93,8 +87,6 @@ func (gcs *GCSStorage) Upload(file *multipart.FileHeader) filestorage.UploadMeta
 	}
 }
 
-// Delete removes a file from GCS
-// NOTE: This does NOT delete from database - that's the caller's responsibility
 func (gcs *GCSStorage) Delete(filePath string, storageType string) error {
 	if filePath == "" {
 		return fmt.Errorf("invalid_file_path")
@@ -109,19 +101,16 @@ func (gcs *GCSStorage) Delete(filePath string, storageType string) error {
 	return nil
 }
 
-// ValidateFileExists checks if file exists in GCS
 func (gcs *GCSStorage) ValidateFileExists(metadata filestorage.UploadMetadata) bool {
 	// TODO: Implement GCS HEAD request to verify file exists
 	return true
 }
 
-// GetDownloadURL returns the GCS signed URL for download
 func (gcs *GCSStorage) GetDownloadURL(metadata filestorage.UploadMetadata) string {
 	// TODO: Generate signed URL when GCS client is available
 	return metadata.FilePath
 }
 
-// GetProviderName returns the provider name
 func (gcs *GCSStorage) GetProviderName() string {
 	return "gcs"
 }

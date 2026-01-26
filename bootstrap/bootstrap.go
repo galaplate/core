@@ -12,7 +12,8 @@ import (
 
 	"github.com/galaplate/core/config"
 	"github.com/galaplate/core/database"
-	"github.com/galaplate/core/file-storage"
+	filestorage "github.com/galaplate/core/file-storage"
+	fileStorageConfig "github.com/galaplate/core/file-storage/config"
 	fileStorageFactory "github.com/galaplate/core/file-storage/factory"
 	"github.com/galaplate/core/file-storage/providers"
 	"github.com/galaplate/core/logger"
@@ -187,78 +188,114 @@ func appWithConfig(cfg *AppConfig) *AppInstance {
 
 // initializeFileStorage initializes the file storage factory with configured providers
 func initializeFileStorage() {
-	// Get filesystem driver from config (defaults to "local")
-	driver := config.ConfigString("filesystems.default")
-	if driver == "" {
-		driver = "local"
+	// Load configuration from environment/YAML
+	cfg, err := fileStorageConfig.LoadFromEnv()
+	if err != nil {
+		logger.Fatal("Failed to load file storage config", map[string]any{
+			"error": err.Error(),
+		})
 	}
 
-	// Get max file size from config (defaults to 10MB)
-	maxSize := config.ConfigInt("filesystems.max_size")
-	if maxSize <= 0 {
-		maxSize = int(filestorage.DefaultFileUploadConfig.MaxSize)
+	// Validate configuration
+	if err := cfg.Validate(); err != nil {
+		logger.Fatal("File storage configuration validation failed", map[string]any{
+			"error": err.Error(),
+		})
 	}
 
-	// Create file upload configuration
-	fileConfig := filestorage.FileUploadConfig{
-		MaxSize:      int64(maxSize),
-		AllowedTypes: filestorage.DefaultFileUploadConfig.AllowedTypes,
-	}
-
-	// Initialize storage providers
+	// Initialize storage providers based on configuration
 	providersMap := make(map[string]filestorage.FileStorageProvider)
 
-	// Local storage provider
-	uploadDir := config.ConfigString("filesystems.disks.local.path")
-	if uploadDir == "" {
-		uploadDir = filestorage.DefaultFileUploadConfig.UploadDir
-	}
-	fileConfig.UploadDir = uploadDir
-	providersMap["local"] = providers.NewLocalStorage(fileConfig)
-
-	// S3 storage provider
-	s3Bucket := config.ConfigString("filesystems.disks.s3.bucket")
-	if s3Bucket != "" {
-		logger.Warn("S3 storage provider available but not fully integrated", map[string]any{
-			"bucket": s3Bucket,
-		})
-	}
-
-	// Google Cloud Storage provider
-	gcsBucket := config.ConfigString("filesystems.disks.gcs.bucket")
-	if gcsBucket != "" {
-		logger.Warn("Google Cloud Storage provider available but not fully integrated", map[string]any{
-			"bucket": gcsBucket,
-		})
-	}
-
-	// Google Drive storage provider
-	gdFolderID := config.ConfigString("filesystems.disks.google_drive.folder_id")
-	if gdFolderID != "" {
-		gdServiceAccountFile := config.ConfigString("filesystems.disks.google_drive.service_account_file")
-
-		gdConfig := &filestorage.FileUploadConfig{
-			MaxSize:      fileConfig.MaxSize,
-			AllowedTypes: fileConfig.AllowedTypes,
-		}
-
-		gdStorage, err := providers.NewGoogleDriveStorage(gdServiceAccountFile, gdFolderID, *gdConfig)
-		if err != nil {
-			logger.Error("Failed to initialize Google Drive storage", map[string]any{
-				"error":  err.Error(),
-				"folder": gdFolderID,
+	for name, driverCfg := range cfg.Drivers {
+		switch driver := driverCfg.(type) {
+		case *fileStorageConfig.LocalConfig:
+			// Create local storage provider
+			localConfig := filestorage.FileUploadConfig{
+				UploadDir:    driver.Path,
+				MaxSize:      driver.MaxSize,
+				AllowedTypes: driver.AllowedTypes,
+			}
+			providersMap[name] = providers.NewLocalStorage(localConfig)
+			logger.Info("Local storage provider initialized", map[string]any{
+				"name": name,
+				"path": driver.Path,
 			})
-		} else {
-			providersMap["google_drive"] = gdStorage
+
+		case *fileStorageConfig.S3Config:
+			// Create S3 storage provider
+			// Note: S3Client initialization is skipped here - add AWS SDK integration if needed
+			s3Config := providers.S3Config{
+				BaseConfig: filestorage.FileUploadConfig{
+					MaxSize:      driver.MaxSize,
+					AllowedTypes: driver.AllowedTypes,
+				},
+				BucketName:   driver.Bucket,
+				Region:       driver.Region,
+				BaseURL:      driver.BaseURL,
+				ACL:          driver.ACL,
+				StorageClass: driver.StorageClass,
+				PathPrefix:   driver.PathPrefix,
+			}
+			providersMap[name] = providers.NewS3Storage(s3Config)
+			logger.Info("S3 storage provider initialized", map[string]any{
+				"name":        name,
+				"bucket":      driver.Bucket,
+				"region":      driver.Region,
+				"path_prefix": driver.PathPrefix,
+			})
+
+		case *fileStorageConfig.GCSConfig:
+			// Create GCS storage provider
+			// Note: GCS Client initialization is skipped here - add GCP SDK integration if needed
+			gcsConfig := providers.GCSConfig{
+				BaseConfig: filestorage.FileUploadConfig{
+					MaxSize:      driver.MaxSize,
+					AllowedTypes: driver.AllowedTypes,
+				},
+				BucketName: driver.Bucket,
+				ProjectID:  driver.Project,
+				BaseURL:    driver.BaseURL,
+			}
+			providersMap[name] = providers.NewGCSStorage(gcsConfig)
+			logger.Info("GCS storage provider initialized", map[string]any{
+				"name":    name,
+				"bucket":  driver.Bucket,
+				"project": driver.Project,
+			})
+
+		case *fileStorageConfig.GoogleDriveConfig:
+			// Create Google Drive storage provider
+			gdConfig := filestorage.FileUploadConfig{
+				MaxSize:      driver.MaxSize,
+				AllowedTypes: driver.AllowedTypes,
+			}
+			gdStorage, err := providers.NewGoogleDriveStorage(
+				driver.ServiceAccountFile,
+				driver.FolderID,
+				gdConfig,
+			)
+			if err != nil {
+				logger.Error("Failed to initialize Google Drive storage", map[string]any{
+					"name":   name,
+					"error":  err.Error(),
+					"folder": driver.FolderID,
+				})
+			} else {
+				providersMap[name] = gdStorage
+				logger.Info("Google Drive storage provider initialized", map[string]any{
+					"name":   name,
+					"folder": driver.FolderID,
+				})
+			}
 		}
 	}
 
-	// Initialize global factory with selected driver
-	fileStorageFactory.Initialize(driver, providersMap)
+	// Initialize global factory with default driver
+	fileStorageFactory.Initialize(cfg.Default, providersMap)
 
-	logger.Info("File storage initialized", map[string]any{
-		"driver":    driver,
-		"providers": len(providersMap),
+	logger.Info("File storage factory initialized", map[string]any{
+		"default_driver":  cfg.Default,
+		"total_providers": len(providersMap),
 	})
 }
 
