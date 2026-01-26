@@ -12,10 +12,14 @@ type S3Config struct {
 	BaseURL                string        // Base URL for downloads (e.g., "https://bucket.s3.amazonaws.com")
 	AccessKey              string        // AWS access key ID
 	SecretKey              string        // AWS secret access key
+	Endpoint               string        // S3 endpoint (use for S3-compatible services like SeaweedFS, MinIO)
+	UsePathStyleEndpoint   bool          // Use path-style URLs instead of virtual-hosted-style (required for some S3-compatible services)
+	DisableACL             bool          // Disable ACL parameter (required for some S3-compatible services that don't support ACL)
+	DisableStorageClass    bool          // Disable StorageClass parameter (required for some S3-compatible services)
 	MaxSize                int64         // Maximum file size in bytes
 	AllowedTypes           []string      // Allowed MIME types
-	ACL                    string        // S3 ACL (e.g., "private", "public-read")
-	StorageClass           string        // S3 storage class (e.g., "STANDARD", "INTELLIGENT_TIERING")
+	ACL                    string        // S3 ACL (e.g., "private", "public-read") - ignored if DisableACL is true
+	StorageClass           string        // S3 storage class (e.g., "STANDARD", "INTELLIGENT_TIERING") - ignored if DisableStorageClass is true
 	PathPrefix             string        // Path prefix for S3 keys (e.g., "uploads", "files/documents")
 	PresignedURLExpiration time.Duration // Expiration duration for presigned URLs (default: 15 minutes)
 }

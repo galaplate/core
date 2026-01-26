@@ -10,6 +10,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/galaplate/core/config"
 	"github.com/galaplate/core/database"
 	filestorage "github.com/galaplate/core/file-storage"
@@ -222,26 +225,67 @@ func initializeFileStorage() {
 			})
 
 		case *fileStorageConfig.S3Config:
-			// Create S3 storage provider
-			// Note: S3Client initialization is skipped here - add AWS SDK integration if needed
+			// Create S3 storage provider with AWS SDK integration
+			// Initialize AWS credentials
+			awsCfg := aws.Config{
+				Region: driver.Region,
+				Credentials: credentials.NewStaticCredentialsProvider(
+					driver.AccessKey,
+					driver.SecretKey,
+					"",
+				),
+			}
+
+			// Configure S3 client options
+			s3ClientOptions := []func(*s3.Options){
+				func(o *s3.Options) {
+					o.Region = driver.Region
+					o.Credentials = awsCfg.Credentials
+				},
+			}
+
+			// Add custom endpoint if specified (for S3-compatible services like SeaweedFS, MinIO)
+			if driver.Endpoint != "" {
+				s3ClientOptions = append(s3ClientOptions, func(o *s3.Options) {
+					o.BaseEndpoint = aws.String(driver.Endpoint)
+				})
+			}
+
+			// Enable path-style URLs if specified (required for some S3-compatible services)
+			if driver.UsePathStyleEndpoint {
+				s3ClientOptions = append(s3ClientOptions, func(o *s3.Options) {
+					o.UsePathStyle = true
+				})
+			}
+
+			// Create S3 client
+			s3Client := s3.NewFromConfig(awsCfg, s3ClientOptions...)
+
 			s3Config := providers.S3Config{
 				BaseConfig: filestorage.FileUploadConfig{
 					MaxSize:      driver.MaxSize,
 					AllowedTypes: driver.AllowedTypes,
 				},
-				BucketName:   driver.Bucket,
-				Region:       driver.Region,
-				BaseURL:      driver.BaseURL,
-				ACL:          driver.ACL,
-				StorageClass: driver.StorageClass,
-				PathPrefix:   driver.PathPrefix,
+				S3Client:               s3Client,
+				BucketName:             driver.Bucket,
+				Region:                 driver.Region,
+				BaseURL:                driver.BaseURL,
+				ACL:                    driver.ACL,
+				StorageClass:           driver.StorageClass,
+				DisableACL:             driver.DisableACL,
+				DisableStorageClass:    driver.DisableStorageClass,
+				PathPrefix:             driver.PathPrefix,
+				PresignedURLExpiration: driver.PresignedURLExpiration,
 			}
 			providersMap[name] = providers.NewS3Storage(s3Config)
 			logger.Info("S3 storage provider initialized", map[string]any{
-				"name":        name,
-				"bucket":      driver.Bucket,
-				"region":      driver.Region,
-				"path_prefix": driver.PathPrefix,
+				"name":                   name,
+				"bucket":                 driver.Bucket,
+				"region":                 driver.Region,
+				"path_prefix":            driver.PathPrefix,
+				"endpoint":               driver.Endpoint,
+				"use_path_style":         driver.UsePathStyleEndpoint,
+				"presigned_url_duration": driver.PresignedURLExpiration.String(),
 			})
 
 		case *fileStorageConfig.GCSConfig:

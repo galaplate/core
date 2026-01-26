@@ -45,23 +45,45 @@ func LoadFromEnv() (*Config, error) {
 	case "s3":
 		region := getEnvValue("filesystems.disks.s3.region", "AWS_REGION")
 		bucket := getEnvValue("filesystems.disks.s3.bucket", "AWS_BUCKET")
-		baseURL := getEnvValue("filesystems.disks.s3.url", "AWS_BASE_URL")
+		baseURL := getEnvValue("filesystems.disks.s3.url", "AWS_URL")
 		if baseURL == "" {
 			baseURL = fmt.Sprintf("https://%s.s3.%s.amazonaws.com", bucket, region)
 		}
 		maxSize := parseMaxSize()
 
+		// Parse UsePathStyleEndpoint
+		usePathStyle := false
+		if pathStyleStr := getEnvValue("filesystems.disks.s3.use_path_style_endpoint", "AWS_USE_PATH_STYLE"); pathStyleStr != "" {
+			usePathStyle = pathStyleStr == "true" || pathStyleStr == "1"
+		}
+
+		// Parse DisableACL
+		disableACL := false
+		if disableACLStr := getEnvValue("filesystems.disks.s3.disable_acl", "AWS_DISABLE_ACL"); disableACLStr != "" {
+			disableACL = disableACLStr == "true" || disableACLStr == "1"
+		}
+
+		// Parse DisableStorageClass
+		disableStorageClass := false
+		if disableStorageClassStr := getEnvValue("filesystems.disks.s3.disable_storage_class", "AWS_DISABLE_STORAGE_CLASS"); disableStorageClassStr != "" {
+			disableStorageClass = disableStorageClassStr == "true" || disableStorageClassStr == "1"
+		}
+
 		s3Config := &S3Config{
-			Region:       region,
-			Bucket:       bucket,
-			BaseURL:      baseURL,
-			AccessKey:    getEnvValue("filesystems.disks.s3.key", "AWS_ACCESS_KEY_ID"),
-			SecretKey:    getEnvValue("filesystems.disks.s3.secret", "AWS_SECRET_ACCESS_KEY"),
-			MaxSize:      maxSize,
-			AllowedTypes: DefaultAllowedTypes(),
-			ACL:          getEnvValue("filesystems.disks.s3.acl", "AWS_ACL"),
-			StorageClass: getEnvValue("filesystems.disks.s3.storage_class", "AWS_STORAGE_CLASS"),
-			PathPrefix:   getEnvValue("filesystems.disks.s3.path_prefix", "AWS_PATH_PREFIX"),
+			Region:               region,
+			Bucket:               bucket,
+			BaseURL:              baseURL,
+			AccessKey:            getEnvValue("filesystems.disks.s3.key", "AWS_ACCESS_KEY_ID"),
+			SecretKey:            getEnvValue("filesystems.disks.s3.secret", "AWS_SECRET_ACCESS_KEY"),
+			Endpoint:             getEnvValue("filesystems.disks.s3.endpoint", "AWS_ENDPOINT"),
+			UsePathStyleEndpoint: usePathStyle,
+			DisableACL:           disableACL,
+			DisableStorageClass:  disableStorageClass,
+			MaxSize:              maxSize,
+			AllowedTypes:         DefaultAllowedTypes(),
+			ACL:                  getEnvValue("filesystems.disks.s3.acl", "AWS_ACL"),
+			StorageClass:         getEnvValue("filesystems.disks.s3.storage_class", "AWS_STORAGE_CLASS"),
+			PathPrefix:           getEnvValue("filesystems.disks.s3.path_prefix", "AWS_PATH_PREFIX"),
 		}
 
 		if s3Config.ACL == "" {
@@ -113,7 +135,7 @@ func LoadFromEnv() (*Config, error) {
 
 	if s3Bucket := getEnvValue("filesystems.disks.s3.bucket", "AWS_BUCKET"); s3Bucket != "" && driver != "s3" {
 		region := getEnvValue("filesystems.disks.s3.region", "AWS_REGION")
-		baseURL := getEnvValue("filesystems.disks.s3.url", "AWS_BASE_URL")
+		baseURL := getEnvValue("filesystems.disks.s3.url", "AWS_URL")
 		if baseURL == "" {
 			baseURL = fmt.Sprintf("https://%s.s3.%s.amazonaws.com", s3Bucket, region)
 		}

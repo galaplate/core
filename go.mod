@@ -6,6 +6,7 @@ toolchain go1.24.4
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.41.1
+	github.com/aws/aws-sdk-go-v2/credentials v1.19.7
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.21.0
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.95.1
 	github.com/go-playground/validator/v10 v10.22.0

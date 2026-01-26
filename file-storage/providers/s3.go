@@ -27,6 +27,8 @@ type S3Config struct {
 	BaseURL                string
 	ACL                    string
 	StorageClass           string
+	DisableACL             bool          // Disable ACL parameter for S3-compatible services
+	DisableStorageClass    bool          // Disable StorageClass parameter for S3-compatible services
 	PathPrefix             string        // Path prefix for S3 keys (e.g., "uploads", "files/documents")
 	PresignedURLExpiration time.Duration // Expiration duration for presigned URLs (default: 15 minutes)
 }
@@ -83,11 +85,13 @@ func (s3 *S3Storage) Upload(file *multipart.FileHeader) filestorage.UploadMetada
 		ContentType: aws.String(contentType),
 	}
 
-	if s3.config.ACL != "" {
+	// Only set ACL if not disabled (some S3-compatible services don't support ACL)
+	if !s3.config.DisableACL && s3.config.ACL != "" {
 		putObjectInput.ACL = types.ObjectCannedACL(s3.config.ACL)
 	}
 
-	if s3.config.StorageClass != "" {
+	// Only set StorageClass if not disabled (some S3-compatible services don't support it)
+	if !s3.config.DisableStorageClass && s3.config.StorageClass != "" {
 		putObjectInput.StorageClass = types.StorageClass(s3.config.StorageClass)
 	}
 
@@ -96,7 +100,7 @@ func (s3 *S3Storage) Upload(file *multipart.FileHeader) filestorage.UploadMetada
 	_, err = uploader.Upload(ctx, putObjectInput)
 	if err != nil {
 		return filestorage.UploadMetadata{
-			Error: "file_save_failed",
+			Error: fmt.Sprintf("file_save_failed: %s", err.Error()),
 		}
 	}
 
