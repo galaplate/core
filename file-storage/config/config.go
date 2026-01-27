@@ -58,8 +58,10 @@ func (c *Config) Validate() error {
 	}
 
 	for name, driver := range c.Drivers {
-		if err := driver.Validate(); err != nil {
-			return fmt.Errorf("driver %s validation failed: %w", name, err)
+		if c.Default == name {
+			if err := driver.Validate(); err != nil {
+				return fmt.Errorf("driver %s validation failed: %w", name, err)
+			}
 		}
 	}
 
