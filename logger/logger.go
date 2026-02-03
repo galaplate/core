@@ -101,6 +101,8 @@ func (l *logger) log(level slog.Level, msg string, data map[string]any) {
 	if err != nil {
 		return
 	}
+
+	l.file.Sync()
 }
 
 func (l *logger) SetFile(filename string) error {
