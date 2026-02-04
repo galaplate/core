@@ -31,22 +31,21 @@ var logInstance *logger
 func init() {
 	logInstance = &logger{level: slog.LevelInfo}
 
-	// Get current working directory
-	cwd, err := os.Getwd()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to get working directory: %v\n", err)
-		return
+	logsDir := os.Getenv("GALAPLATE_LOGS_DIR")
+	if logsDir == "" {
+		cwd, err := os.Getwd()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to get working directory: %v\n", err)
+			return
+		}
+		logsDir = cwd + "/storage/logs"
 	}
 
-	logsDir := cwd + "/storage/logs"
-
-	// Create storage/logs directory if it doesn't exist
 	if err := os.MkdirAll(logsDir, 0755); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to create logs directory: %v\n", err)
 		return
 	}
 
-	// Create log filename with current date
 	logFilename := fmt.Sprintf("%s/app.%s.log", logsDir, time.Now().Format("2006-01-02"))
 
 	if err := logInstance.SetFile(logFilename); err != nil {
@@ -54,8 +53,7 @@ func init() {
 		return
 	}
 
-	// Initialize rotatelogs for future rotations
-	_, err = rotatelogs.New(
+	_, err := rotatelogs.New(
 		logsDir+"/app.%Y-%m-%d.log",
 		rotatelogs.WithLinkName(logsDir+"/app.log"),
 		rotatelogs.WithMaxAge(24*time.Hour),
@@ -88,7 +86,6 @@ func (l *logger) log(level slog.Level, msg string, data map[string]any) {
 	defer l.mu.Unlock()
 
 	if l.file == nil {
-		// maybe add another way to log, I did not want to add fmt.Println since this is a TUI app
 		return
 	}
 
@@ -141,6 +138,22 @@ func SetFile(filename string) error {
 	return logInstance.SetFile(filename)
 }
 
+func ReinitializeForTesting(projectRoot string) error {
+	logsDir := projectRoot + "/storage/logs"
+
+	if err := os.MkdirAll(logsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create logs directory: %w", err)
+	}
+
+	logFilename := fmt.Sprintf("%s/app.%s.log", logsDir, time.Now().Format("2006-01-02"))
+
+	if err := logInstance.SetFile(logFilename); err != nil {
+		return fmt.Errorf("failed to set log file: %w", err)
+	}
+
+	return nil
+}
+
 func Debug(msg string, data ...map[string]any) {
 	var logData map[string]any
 	if len(data) > 0 {
@@ -180,7 +193,6 @@ func Fatal(msg string, data ...map[string]any) {
 	}
 	logInstance.log(slog.LevelError, msg, logData)
 
-	// Display error in terminal before exiting
 	fmt.Fprintf(os.Stderr, "FATAL ERROR: %s\n", msg)
 	if logData != nil && len(logData) > 0 {
 		fmt.Fprintf(os.Stderr, "📋 Details:\n")
