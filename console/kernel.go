@@ -51,6 +51,9 @@ func (k *Kernel) registerDefaultCommands() {
 
 	// Policy management command
 	k.Register(commands.NewPolicyCommand())
+
+	// Route listing command (requires SetupRoutes injection from app)
+	k.Register(&commands.RouteListCommand{})
 }
 
 func (k *Kernel) Register(command Command) {
