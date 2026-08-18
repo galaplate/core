@@ -6,7 +6,7 @@ This is a Go library/framework package (`github.com/galaplate/core`) that provid
 
 ## Stack
 
-- **HTTP Framework**: [Fiber v2](https://gofiber.io/) - Express-inspired web framework for Go
+- **HTTP Framework**: [Fiber v3](https://gofiber.io/) - Express-inspired web framework for Go
 - **Database ORM**: [GORM](https://gorm.io/) - The fantastic ORM library
 - **Databases**: MySQL, PostgreSQL, SQLite
 - **Logging**: [Logrus](https://github.com/sirupsen/logrus) - Structured logging with file rotation
