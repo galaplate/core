@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 type HTTPTestHelper struct {
@@ -60,7 +60,7 @@ func (h *HTTPTestHelper) request(method, path string, body interface{}, headers 
 		}
 	}
 
-	return h.tc.App.Test(req, -1)
+	return h.tc.App.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 }
 
 func (h *HTTPTestHelper) WithAuth(token string) map[string]string {

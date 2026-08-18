@@ -1,7 +1,7 @@
 package dto
 
 import (
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"github.com/galaplate/core/supports"
 )
 
@@ -13,7 +13,7 @@ type {{.StructName}} struct {
 	// Email string `json:"email" validate:"required,email"`
 }
 
-func (s *{{.StructName}}) Validate(c *fiber.Ctx) (u *{{.StructName}}, err error) {
+func (s *{{.StructName}}) Validate(c fiber.Ctx) (u *{{.StructName}}, err error) {
     if err = supports.NewValidator(c).Validate(s); err != nil {
 		return nil, err
 	}

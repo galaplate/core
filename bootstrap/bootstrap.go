@@ -23,8 +23,8 @@ import (
 	"github.com/galaplate/core/queue"
 	"github.com/galaplate/core/scheduler"
 	"github.com/galaplate/core/supports"
-	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/template/html/v2"
+	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/template/html/v3"
 	"gorm.io/gorm"
 )
 
@@ -94,7 +94,7 @@ func DefaultConfig() *AppConfig {
 		ShutdownTimeout:     30 * time.Second,
 		FiberConfig: &fiber.Config{
 			Views: html.New("./templates", ".html"),
-			ErrorHandler: func(c *fiber.Ctx, err error) error {
+			ErrorHandler: func(c fiber.Ctx, err error) error {
 				var errResponse supports.GlobalErrorHandlerResp
 				if json.Unmarshal([]byte(err.Error()), &errResponse) != nil {
 					var e *fiber.Error

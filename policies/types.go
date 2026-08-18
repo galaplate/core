@@ -3,7 +3,7 @@ package policies
 import (
 	"context"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 // PolicyResult represents the result of a policy evaluation
@@ -16,7 +16,7 @@ type PolicyResult struct {
 // PolicyContext contains information needed for policy evaluation
 type PolicyContext struct {
 	User     any
-	Request  *fiber.Ctx
+	Request  fiber.Ctx
 	Resource string
 	Action   string
 	Data     map[string]any

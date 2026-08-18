@@ -8,12 +8,12 @@ import (
 	"strings"
 
 	"github.com/go-playground/validator/v10"
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 type (
 	XValidator struct {
-		c               *fiber.Ctx
+		c               fiber.Ctx
 		CustomValidator *[]func(string, validator.Func) error
 	}
 	GlobalErrorHandlerResp struct {
@@ -28,7 +28,7 @@ var ValidatorRegistry = map[string]validator.Func{}
 
 var validate *validator.Validate
 
-func NewValidator(c *fiber.Ctx) *XValidator {
+func NewValidator(c fiber.Ctx) *XValidator {
 	return &XValidator{
 		c: c,
 	}
@@ -127,7 +127,7 @@ func (v *XValidator) Validate(data any) (err error) {
 		}
 	}
 
-	err = v.c.BodyParser(&data)
+	err = v.c.Bind().Body(&data)
 	if err != nil {
 		return fmt.Errorf("body parsing error: %v", err)
 	}

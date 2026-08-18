@@ -10,7 +10,7 @@ import (
 	"github.com/galaplate/core/config"
 	"github.com/galaplate/core/database"
 	"github.com/galaplate/core/logger"
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"github.com/joho/godotenv"
 	"github.com/stretchr/testify/suite"
 	"gorm.io/gorm"

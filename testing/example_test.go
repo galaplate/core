@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	coretesting "github.com/galaplate/core/testing"
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -15,7 +15,7 @@ type ExampleTestSuite struct {
 func (s *ExampleTestSuite) SetupSuite() {
 	s.Config = coretesting.DefaultTestConfig()
 	s.Config.SetupRoutes = func(app *fiber.App) {
-		app.Get("/health", func(c *fiber.Ctx) error {
+		app.Get("/health", func(c fiber.Ctx) error {
 			return c.JSON(fiber.Map{
 				"status": "ok",
 			})

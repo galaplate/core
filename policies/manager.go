@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 // PolicyManager manages and executes policies
@@ -84,7 +84,7 @@ func (pm *PolicyManager) EvaluatePoliciesDirect(ctx context.Context, policies []
 
 // PolicyMiddleware creates a Fiber middleware that enforces policies
 func (pm *PolicyManager) PolicyMiddleware(policyNames ...string) fiber.Handler {
-	return func(c *fiber.Ctx) error {
+	return func(c fiber.Ctx) error {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
@@ -114,7 +114,7 @@ func (pm *PolicyManager) PolicyMiddleware(policyNames ...string) fiber.Handler {
 
 // PolicyMiddlewareDirect creates a Fiber middleware that enforces policies using policy structs directly
 func (pm *PolicyManager) PolicyMiddlewareDirect(policies ...Policy) fiber.Handler {
-	return func(c *fiber.Ctx) error {
+	return func(c fiber.Ctx) error {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
