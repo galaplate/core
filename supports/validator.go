@@ -120,7 +120,6 @@ func (v *XValidator) Validate(data any) (err error) {
 	}
 	body := v.c.Body()
 	if len(body) == 0 {
-		data = &struct{}{}
 		v.c.Request().SetBody([]byte("{}"))
 		if v.c.Get("Content-Type") == "" {
 			v.c.Request().Header.Set("Content-Type", "application/json")
