@@ -1,11 +1,15 @@
 package scheduler
 
-import "github.com/galaplate/core/scheduler"
+import (
+	"context"
+
+	"github.com/galaplate/core/scheduler"
+)
 
 // {{.StructName}} - Generated on {{.Timestamp}}
 type {{.StructName}} struct{}
 
-func ({{.StructName}}) Handle() (string, func()) {
+func ({{.StructName}}) Handle() (string, func(context.Context)) {
 	// Cron expression examples:
 	// "@every 5s"     - every 5 seconds
 	// "@every 1m"     - every minute
@@ -17,7 +21,7 @@ func ({{.StructName}}) Handle() (string, func()) {
 	// "0 0 12 * * *"  - every day at noon
 	// "0 15 10 * * *" - 10:15 AM every day
 
-	return "{{.Schedule}}", func() {
+	return "{{.Schedule}}", func(ctx context.Context) {
 		// TODO: Add your scheduled task logic here
 
 		// Example: Log a message

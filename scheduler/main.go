@@ -8,7 +8,7 @@ import (
 )
 
 type Handler interface {
-	Handle() (string, func())
+	Handle() (string, func(context.Context))
 }
 
 type Scheduler struct {
@@ -37,8 +37,10 @@ func (s *Scheduler) RunTasks() error {
 	return nil
 }
 
-func (s *Scheduler) AddTask(spec string, task func()) (cron.EntryID, error) {
-	return s.cron.AddFunc(spec, task)
+func (s *Scheduler) AddTask(spec string, task func(context.Context)) (cron.EntryID, error) {
+	return s.cron.AddFunc(spec, func() {
+		task(context.Background())
+	})
 }
 
 func (s *Scheduler) Start() {

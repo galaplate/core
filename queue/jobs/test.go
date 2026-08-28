@@ -1,6 +1,7 @@
 package jobs
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -23,7 +24,7 @@ func (Test) Type() string {
 	return "test"
 }
 
-func (Test) Handle(payload json.RawMessage) error {
+func (Test) Handle(ctx context.Context, payload json.RawMessage) error {
 	fmt.Println("Test job is running with payload", string(payload))
 	return nil
 }

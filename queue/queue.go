@@ -64,7 +64,7 @@ func (q *Queue) worker() {
 		var jobRecord models.Job
 		start := time.Now()
 
-		result := database.Connect.
+		result := database.Connect.WithContext(q.ctx).
 			Where("state = ? AND available_at <= ?", models.JobPending, time.Now()).
 			Order("created_at ASC").
 			First(&jobRecord)
@@ -98,7 +98,7 @@ func (q *Queue) worker() {
 			continue
 		}
 
-		err = job.Handle(jobRecord.Payload)
+		err = job.Handle(q.ctx, jobRecord.Payload)
 
 		if err != nil {
 			if jobRecord.Attempts >= job.MaxAttempts() {
@@ -189,7 +189,7 @@ type JobEnqueueRequest struct {
 
 type Job interface {
 	Type() string
-	Handle(payload json.RawMessage) error
+	Handle(ctx context.Context, payload json.RawMessage) error
 	MaxAttempts() int
 	RetryAfter() time.Duration
 }
