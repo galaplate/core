@@ -20,6 +20,10 @@ func (e Test) RetryAfter() time.Duration {
 	return 2 * time.Minute
 }
 
+func (e Test) Timeout() time.Duration {
+	return 30 * time.Second
+}
+
 func (Test) Type() string {
 	return "test"
 }

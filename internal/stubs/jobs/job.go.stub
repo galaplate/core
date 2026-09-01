@@ -27,6 +27,11 @@ func (j {{.StructName}}) RetryAfter() time.Duration {
 	return {{.RetryMinutes}} * time.Minute
 }
 
+// Timeout returns the maximum duration a single attempt may run.
+func (j {{.StructName}}) Timeout() time.Duration {
+	return 5 * time.Minute
+}
+
 // Type returns the job type identifier
 func ({{.StructName}}) Type() string {
 	return "{{.JobName}}"
