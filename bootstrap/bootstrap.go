@@ -143,6 +143,8 @@ func appWithConfig(cfg *AppConfig) *AppInstance {
 
 	config.InitializeGlobal(configData)
 
+	logger.SetStdout(config.ConfigBool("app.log_stdout"))
+
 	secret := config.ConfigString("app.key")
 	if secret == "" {
 		panic("You must generate the secret key first")

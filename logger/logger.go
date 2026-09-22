@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -17,6 +18,7 @@ type logger struct {
 	file   *os.File
 	level  slog.Level
 	output string
+	stdout bool
 }
 
 type logMessage struct {
@@ -53,6 +55,10 @@ func init() {
 		return
 	}
 
+	if stdout, err := strconv.ParseBool(os.Getenv("GALAPLATE_LOG_STDOUT")); err == nil {
+		logInstance.SetStdout(stdout)
+	}
+
 	_, err := rotatelogs.New(
 		logsDir+"/app.%Y-%m-%d.log",
 		rotatelogs.WithLinkName(logsDir+"/app.log"),
@@ -82,20 +88,20 @@ func (l *logger) log(level slog.Level, msg string, data map[string]any) {
 		return
 	}
 
+	logData = append(logData, '\n')
+
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
+	if l.stdout {
+		os.Stdout.Write(logData)
+	}
 
 	if l.file == nil {
 		return
 	}
 
-	_, err = l.file.Write(logData)
-	if err != nil {
-		return
-	}
-
-	_, err = l.file.Write([]byte("\n"))
-	if err != nil {
+	if _, err = l.file.Write(logData); err != nil {
 		return
 	}
 
@@ -130,12 +136,26 @@ func (l *logger) SetLevel(level slog.Level) {
 	l.level = level
 }
 
+func (l *logger) SetStdout(enabled bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	l.stdout = enabled
+}
+
 func SetLevel(level slog.Level) {
 	logInstance.SetLevel(level)
 }
 
 func SetFile(filename string) error {
 	return logInstance.SetFile(filename)
+}
+
+// SetStdout controls whether log entries are also written to stdout,
+// in addition to the log file in storage/logs. Useful during local
+// development (e.g. `make dev`/`make watch`) to see logs directly in the terminal.
+func SetStdout(enabled bool) {
+	logInstance.SetStdout(enabled)
 }
 
 func ReinitializeForTesting(projectRoot string) error {
