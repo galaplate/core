@@ -1,0 +1,7 @@
+.env
+vendor/
+server
+logs/*.log
+storage/
+coverage.out
+coverage.html

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/galaplate/core/logger"
+	"github.com/galaplate/core/timezone"
 	"github.com/robfig/cron/v3"
 )
 
@@ -18,7 +19,9 @@ type Scheduler struct {
 
 func New() *Scheduler {
 	return &Scheduler{
-		cron:    cron.New(cron.WithSeconds()),
+		// cron.WithLocation makes registered schedules fire in the app
+		// timezone (falls back to UTC via the timezone package default).
+		cron:    cron.New(cron.WithSeconds(), cron.WithLocation(timezone.Location())),
 		started: false,
 	}
 }

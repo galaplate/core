@@ -9,6 +9,7 @@ import (
 
 	"github.com/galaplate/core/database"
 	"github.com/galaplate/core/models"
+	"github.com/galaplate/core/timezone"
 )
 
 type Task func()
@@ -62,10 +63,10 @@ func (q *Queue) worker() {
 		}
 
 		var jobRecord models.Job
-		start := time.Now()
+		start := timezone.Now()
 
 		result := database.Connect.WithContext(q.ctx).
-			Where("state = ? AND available_at <= ?", models.JobPending, time.Now()).
+			Where("state = ? AND available_at <= ?", models.JobPending, timezone.Now()).
 			Order("created_at ASC").
 			First(&jobRecord)
 
@@ -107,13 +108,13 @@ func (q *Queue) worker() {
 				database.Connect.Model(&jobRecord).Updates(models.Job{
 					State:       models.JobPending,
 					ErrorMsg:    err.Error(),
-					AvailableAt: time.Now().Add(job.RetryAfter()),
+					AvailableAt: timezone.Now().Add(job.RetryAfter()),
 				})
 			}
 		} else {
 			database.Connect.Model(&jobRecord).Updates(models.Job{
 				State:      models.JobFinished,
-				FinishedAt: ptr(time.Now()),
+				FinishedAt: ptr(timezone.Now()),
 			})
 		}
 	}
@@ -150,7 +151,7 @@ func failJob(job *models.Job, err error) {
 	database.Connect.Model(job).Updates(models.Job{
 		State:      models.JobFailed,
 		ErrorMsg:   err.Error(),
-		FinishedAt: ptr(time.Now()),
+		FinishedAt: ptr(timezone.Now()),
 	})
 }
 
@@ -212,7 +213,7 @@ func SaveJobToDB(req JobEnqueueRequest) (*models.Job, error) {
 		return nil, err
 	}
 
-	now := time.Now()
+	now := timezone.Now()
 
 	job := models.Job{
 		Type:        req.Type,

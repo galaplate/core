@@ -14,11 +14,13 @@ import (
 )
 
 type logger struct {
-	mu     sync.Mutex
-	file   *os.File
-	level  slog.Level
-	output string
-	stdout bool
+	mu      sync.Mutex
+	file    *os.File
+	level   slog.Level
+	output  string
+	logsDir string
+	stdout  bool
+	loc     *time.Location // nil = process local (until SetLocation)
 }
 
 type logMessage struct {
@@ -48,9 +50,8 @@ func init() {
 		return
 	}
 
-	logFilename := fmt.Sprintf("%s/app.%s.log", logsDir, time.Now().Format("2006-01-02"))
-
-	if err := logInstance.SetFile(logFilename); err != nil {
+	logInstance.logsDir = logsDir
+	if err := logInstance.SetFile(logInstance.dailyFile()); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to set log file: %v\n", err)
 		return
 	}
@@ -76,7 +77,7 @@ func (l *logger) log(level slog.Level, msg string, data map[string]any) {
 	}
 
 	logMessage := logMessage{
-		Timestamp: time.Now().Format(time.RFC3339),
+		Timestamp: l.now().Format(time.RFC3339),
 		Level:     level.String(),
 		Message:   msg,
 		Data:      data,
@@ -106,6 +107,33 @@ func (l *logger) log(level slog.Level, msg string, data map[string]any) {
 	}
 
 	l.file.Sync()
+}
+
+func (l *logger) now() time.Time {
+	if l.loc == nil {
+		return time.Now()
+	}
+	return time.Now().In(l.loc)
+}
+
+func (l *logger) dailyFile() string {
+	return fmt.Sprintf("%s/app.%s.log", l.logsDir, l.now().Format("2006-01-02"))
+}
+
+// SetLocation sets the timezone for entry timestamps and the daily log
+// filename, and reopens the file under the date in that timezone. Called by
+// the timezone package once the app timezone is resolved (logger cannot
+// import it without a cycle).
+func SetLocation(loc *time.Location) {
+	logInstance.loc = loc
+	if logInstance.logsDir == "" {
+		return
+	}
+	if name := logInstance.dailyFile(); name != logInstance.output {
+		if err := logInstance.SetFile(name); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to set log file: %v\n", err)
+		}
+	}
 }
 
 func (l *logger) SetFile(filename string) error {
@@ -165,9 +193,8 @@ func ReinitializeForTesting(projectRoot string) error {
 		return fmt.Errorf("failed to create logs directory: %w", err)
 	}
 
-	logFilename := fmt.Sprintf("%s/app.%s.log", logsDir, time.Now().Format("2006-01-02"))
-
-	if err := logInstance.SetFile(logFilename); err != nil {
+	logInstance.logsDir = logsDir
+	if err := logInstance.SetFile(logInstance.dailyFile()); err != nil {
 		return fmt.Errorf("failed to set log file: %w", err)
 	}
 
