@@ -24,3 +24,7 @@ func ConfigInt(key string) int {
 func ConfigBool(key string) bool {
 	return GetGlobal().GetBool(key)
 }
+
+func MockAppEnv(env string) {
+	GetGlobal().Set("app.env", env)
+}

@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/galaplate/core/config"
 	"github.com/galaplate/core/supports"
+	"github.com/galaplate/core/timezone"
 	"gorm.io/gorm"
 )
 
@@ -212,7 +212,7 @@ func (m *Migrator) Up() error {
 		migrationRecord := MigrationInfo{
 			Migration: migration.GetName(),
 			Batch:     newBatch,
-			CreatedAt: time.Now(),
+			CreatedAt: timezone.Now(),
 		}
 
 		if err := tx.Table("migrations").Create(&migrationRecord).Error; err != nil {
@@ -355,6 +355,47 @@ func (m *Migrator) resetMigrations() error {
 
 		if err := m.Down(); err != nil {
 			return err
+		}
+	}
+
+	return nil
+}
+
+// TruncateAll deletes every row from every migrated table and resets
+// auto-increment counters, without touching schema (no DROP/CREATE TABLE).
+// Intended for fast per-test cleanup in test suites, where a full
+// Refresh() (rollback + re-run every migration) is far more expensive
+// than it needs to be for just clearing data between tests.
+func (m *Migrator) TruncateAll() error {
+	if err := m.disableForeignKeyChecks(); err != nil {
+		return fmt.Errorf("failed to disable foreign key checks: %w", err)
+	}
+	defer m.enableForeignKeyChecks()
+
+	tables, err := m.db.Migrator().GetTables()
+	if err != nil {
+		return fmt.Errorf("failed to list tables: %w", err)
+	}
+
+	dbDriver := supports.MapPostgres(GetDriver(config.ConfigString("database.default")))
+
+	for _, table := range tables {
+		if table == "migrations" {
+			continue
+		}
+
+		if err := m.db.Exec(fmt.Sprintf("DELETE FROM %s", table)).Error; err != nil {
+			return fmt.Errorf("failed to truncate table %s: %w", table, err)
+		}
+
+		switch dbDriver {
+		case "sqlite":
+			// Ignore error: sqlite_sequence only exists if a table uses AUTOINCREMENT.
+			m.db.Exec("DELETE FROM sqlite_sequence WHERE name = ?", table)
+		case "postgres":
+			m.db.Exec(fmt.Sprintf(`ALTER SEQUENCE IF EXISTS %s_id_seq RESTART WITH 1`, table))
+		case "mysql":
+			m.db.Exec(fmt.Sprintf("ALTER TABLE %s AUTO_INCREMENT = 1", table))
 		}
 	}
 

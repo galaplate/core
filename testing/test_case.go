@@ -3,8 +3,8 @@ package testing
 import (
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"sync"
 
 	"github.com/galaplate/core/bootstrap"
 	"github.com/galaplate/core/config"
@@ -15,6 +15,13 @@ import (
 	"github.com/stretchr/testify/suite"
 	"gorm.io/gorm"
 )
+
+// freshSchemaOnce ensures the expensive rollback-then-remigrate cycle
+// (dropping and recreating every table) runs at most once per test binary
+// process, no matter how many suites or test methods request a database
+// refresh. Every refresh after the first is satisfied by TruncateAll(),
+// which only clears data and is much cheaper since it skips schema DDL.
+var freshSchemaOnce sync.Once
 
 type TestConfig struct {
 	EnvFile           string
@@ -35,6 +42,8 @@ type TestCase struct {
 	refreshDatabase   bool
 	databaseRefreshed bool
 	projectRoot       string
+	mockedConfig      map[string]any
+	mockedConfigMu    sync.Mutex
 }
 
 func DefaultTestConfig() *TestConfig {
@@ -62,8 +71,14 @@ func NewTestCase(opts ...func(*TestConfig)) *TestCase {
 func (tc *TestCase) SetupTest() {
 	tc.ensureProjectRoot()
 	tc.loadEnvironment()
-	tc.handleDatabaseRefresh()
+	// bootstrapApplication must run before handleDatabaseRefresh: it's the
+	// step that loads YAML config (config.InitializeGlobal) and opens the
+	// DB connection (database.New) that RefreshDatabase's in-process
+	// migrator call depends on to resolve the configured driver. Refreshing
+	// first left the driver lookup empty on the first test in the process,
+	// panicking with "Unsupported database type".
 	tc.bootstrapApplication()
+	tc.handleDatabaseRefresh()
 
 	if tc.Config.CustomBootstrap != nil {
 		tc.Config.CustomBootstrap(tc)
@@ -208,13 +223,32 @@ func (tc *TestCase) EnableRefreshDatabase() {
 	tc.refreshDatabase = true
 }
 
+// RefreshDatabase resets the test database to a clean state. The full,
+// expensive schema rebuild (rollback + re-run every migration) only ever
+// runs once per test binary process (see freshSchemaOnce); every call
+// after that does a fast TruncateAll() instead, which clears data without
+// touching schema. This used to shell out to `go run main.go console
+// db:fresh --force` on every call, which paid for a full Go process spawn
+// plus a full schema rebuild on every single test — the dominant cost in
+// suites using RefreshDatabaseBeforeEachTest.
 func (tc *TestCase) RefreshDatabase() error {
-	cmd := exec.Command("go", "run", "main.go", "console", "db:fresh", "--force")
-	cmd.Dir = tc.projectRoot
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	if database.Connect == nil {
+		database.New()
+	}
 
-	return cmd.Run()
+	var refreshErr error
+	ranFullRefresh := false
+
+	freshSchemaOnce.Do(func() {
+		refreshErr = database.NewMigrator().Refresh()
+		ranFullRefresh = true
+	})
+
+	if ranFullRefresh {
+		return refreshErr
+	}
+
+	return database.NewMigrator().TruncateAll()
 }
 
 func (tc *TestCase) RefreshDatabaseBetweenTests() {
@@ -222,6 +256,8 @@ func (tc *TestCase) RefreshDatabaseBetweenTests() {
 }
 
 func (tc *TestCase) TearDownTest() {
+	tc.resetMockedConfig()
+
 	if tc.DB != nil {
 		sqlDB, err := tc.DB.DB()
 		if err == nil {
@@ -243,4 +279,40 @@ func (tc *TestCase) GetApp() *fiber.App {
 
 func (tc *TestCase) GetProjectRoot() string {
 	return tc.projectRoot
+}
+
+// MockConfig overrides a single config key for the duration of the test,
+// remembering its original value (captured on first override only) so
+// resetMockedConfig can restore it later.
+func (tc *TestCase) MockConfig(key string, value any) {
+	tc.mockedConfigMu.Lock()
+	defer tc.mockedConfigMu.Unlock()
+
+	if tc.mockedConfig == nil {
+		tc.mockedConfig = make(map[string]any)
+	}
+	if _, captured := tc.mockedConfig[key]; !captured {
+		tc.mockedConfig[key] = config.Config(key)
+	}
+
+	config.GetGlobal().Set(key, value)
+}
+
+// MockConfigMap overrides multiple config keys at once.
+func (tc *TestCase) MockConfigMap(values map[string]any) {
+	for key, value := range values {
+		tc.MockConfig(key, value)
+	}
+}
+
+// resetMockedConfig restores every key overridden via MockConfig/MockConfigMap
+// back to its original value.
+func (tc *TestCase) resetMockedConfig() {
+	tc.mockedConfigMu.Lock()
+	defer tc.mockedConfigMu.Unlock()
+
+	for key, original := range tc.mockedConfig {
+		config.GetGlobal().Set(key, original)
+	}
+	tc.mockedConfig = make(map[string]any)
 }
