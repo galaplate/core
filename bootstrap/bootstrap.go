@@ -20,6 +20,7 @@ import (
 	fileStorageFactory "github.com/galaplate/core/file-storage/factory"
 	"github.com/galaplate/core/file-storage/providers"
 	"github.com/galaplate/core/logger"
+	"github.com/galaplate/core/provider"
 	"github.com/galaplate/core/queue"
 	"github.com/galaplate/core/scheduler"
 	"github.com/galaplate/core/supports"
@@ -167,9 +168,13 @@ func appWithConfig(cfg *AppConfig) *AppInstance {
 	// Initialize file storage
 	initializeFileStorage()
 
+	provider.Boot()
+
 	if cfg.SetupRoutes != nil {
 		cfg.SetupRoutes(app)
 	}
+
+	provider.MountRoutes(app)
 
 	appInstance := &AppInstance{
 		Fiber: app,

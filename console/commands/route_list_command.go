@@ -8,6 +8,7 @@ import (
 
 	"github.com/galaplate/core/fiber"
 	"github.com/galaplate/core/logger"
+	"github.com/galaplate/core/provider"
 	"slices"
 )
 
@@ -29,7 +30,7 @@ func (c *RouteListCommand) GetDescription() string {
 }
 
 func (c *RouteListCommand) Execute(args []string) error {
-	if c.SetupRoutes == nil {
+	if c.SetupRoutes == nil && len(provider.All()) == 0 {
 		fmt.Println("❌ No router configured. Set SetupRoutes before registering this command.")
 		return nil
 	}
@@ -42,7 +43,10 @@ func (c *RouteListCommand) Execute(args []string) error {
 
 	app := fiber.New(fiber.Config{})
 
-	c.SetupRoutes(app)
+	if c.SetupRoutes != nil {
+		c.SetupRoutes(app)
+	}
+	provider.MountRoutes(app)
 
 	routes := c.extractRoutes(app)
 

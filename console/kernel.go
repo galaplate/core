@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/galaplate/core/console/commands"
+	"github.com/galaplate/core/provider"
 )
 
 type Command interface {
@@ -24,6 +25,9 @@ func NewKernel() *Kernel {
 	}
 
 	kernel.registerDefaultCommands()
+	for _, command := range provider.Commands() {
+		kernel.Register(command)
+	}
 	return kernel
 }
 
