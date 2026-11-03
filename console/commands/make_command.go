@@ -79,10 +79,14 @@ func (c *MakeCommand) createCommand(name string) error {
 	}
 
 	fmt.Printf("✅ Command created successfully: %s\n", filePath)
-	fmt.Printf("📝 Remember to register your command in console/commands.go\n")
-	fmt.Printf("\nExample registration:\n")
-	fmt.Printf("kernel.Register(&commands.%s{})\n", className)
-	fmt.Printf("In console/kernel.go RegisterCommands function\n")
+	fmt.Printf("📝 Register it in the Commands() method of providers/console_service_provider.go:\n\n")
+	fmt.Printf("    import \"%s/console/commands\"\n\n", moduleName)
+	fmt.Printf("    func (p *ConsoleServiceProvider) Commands() []provider.Command {\n")
+	fmt.Printf("        return []provider.Command{\n")
+	fmt.Printf("            &commands.%s{},\n", className)
+	fmt.Printf("        }\n")
+	fmt.Printf("    }\n\n")
+	fmt.Printf("Then run it with: make console %s\n", signatureName)
 
 	return nil
 }

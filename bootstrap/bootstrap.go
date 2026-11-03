@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -157,16 +158,24 @@ func appWithConfig(cfg *AppConfig) *AppInstance {
 	}
 
 	app := fiber.New(*fiberCfg)
-	if cfg.GormConfig != nil {
-		database.New(func(c *database.Config) {
-			c.GormConfig = cfg.GormConfig
-		})
-	} else {
-		database.New()
-	}
 
-	// Initialize file storage
-	initializeFileStorage()
+	// Console commands that only print help or generate files don't need
+	// the database or file storage; skipping them keeps those commands
+	// instant and working even when the database is unreachable.
+	needsServices := !cfg.IsConsoleMode || consoleCommandNeedsServices(os.Args)
+
+	if needsServices {
+		if cfg.GormConfig != nil {
+			database.New(func(c *database.Config) {
+				c.GormConfig = cfg.GormConfig
+			})
+		} else {
+			database.New()
+		}
+
+		// Initialize file storage
+		initializeFileStorage()
+	}
 
 	provider.Boot()
 
@@ -194,6 +203,33 @@ func appWithConfig(cfg *AppConfig) *AppInstance {
 	}
 
 	return appInstance
+}
+
+// consoleCommandNeedsServices reports whether the console invocation in args
+// (os.Args form: <bin> console <command> ...) needs the database and file
+// storage. Help/listing and file generators don't; make:job does, since it
+// checks whether the jobs table already exists. Unknown commands (including
+// app commands registered via providers) are assumed to need them, as is
+// anything not actually invoked as `console` (e.g. the test harness, which
+// sets IsConsoleMode without console args).
+func consoleCommandNeedsServices(args []string) bool {
+	if len(args) < 2 || args[1] != "console" {
+		return true
+	}
+	if len(args) < 3 {
+		return false
+	}
+
+	switch command := args[2]; {
+	case command == "list", command == "help":
+		return false
+	case command == "make:job":
+		return true
+	case strings.HasPrefix(command, "make:"):
+		return false
+	}
+
+	return true
 }
 
 // initializeFileStorage initializes the file storage factory with configured providers

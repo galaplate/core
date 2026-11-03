@@ -72,6 +72,10 @@ func (k *Kernel) Run(args []string) error {
 	commandName := args[2]
 	commandArgs := args[3:]
 
+	if commandName == "list" || commandName == "help" {
+		return k.showHelp()
+	}
+
 	if command, exists := k.commands[commandName]; exists {
 		return command.Execute(commandArgs)
 	}
