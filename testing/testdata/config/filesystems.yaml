@@ -1,0 +1,8 @@
+default: local
+
+disks:
+  local:
+    driver: local
+    path: ${FILESYSTEM_LOCAL_PATH:storage/app/uploads}
+    url: /storage/app/uploads
+    visibility: private
