@@ -1,0 +1,6 @@
+name: GalaplateCoreTest
+env: testing
+debug: false
+key: test-secret-key
+timezone: UTC
+log_stdout: false
