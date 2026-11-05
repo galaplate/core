@@ -1,0 +1,42 @@
+# {{.ModulePath}}
+
+A [Galaplate](https://github.com/galaplate/galaplate) package.
+
+## Installation
+
+```bash
+go get {{.ModulePath}}
+```
+
+Add a blank import to your application, e.g. in `providers/packages.go`:
+
+```go
+package providers
+
+import (
+	_ "{{.ModulePath}}"
+)
+```
+
+Then run the migrations:
+
+```bash
+go run main.go console db:up
+```
+
+## What it provides
+
+| Kind | Name |
+|------|------|
+| Route | `GET /api/{{.Name}}/ping` |
+| Command | `{{.Name}}:hello` |
+
+## Middleware aliases
+
+This package doesn't require any yet. List here every alias it uses with
+`provider.Middleware(...)`, so applications know what to register with
+`provider.AliasMiddleware(...)`.
+
+## Configuration
+
+List the config keys this package reads (e.g. `{{.Name}}.per_page`) and their defaults.

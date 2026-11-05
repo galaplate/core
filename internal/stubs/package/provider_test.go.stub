@@ -1,0 +1,50 @@
+package {{.PackageName}}_test
+
+import (
+	"io"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/galaplate/core/fiber"
+	"github.com/galaplate/core/provider"
+	{{.PackageName}} "{{.ModulePath}}"
+)
+
+func setup(t *testing.T) *fiber.App {
+	t.Helper()
+	provider.Reset()
+	provider.Add(&{{.PackageName}}.{{.StructName}}{})
+	provider.AliasMiddleware("auth", func(c fiber.Ctx) error { return c.Next() })
+	provider.Boot()
+
+	app := fiber.New()
+	provider.MountRoutes(app)
+	return app
+}
+
+func TestPingRoute(t *testing.T) {
+	app := setup(t)
+
+	resp, err := app.Test(httptest.NewRequest("GET", "/api/{{.Name}}/ping", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if string(body) == "" {
+		t.Fatal("empty body")
+	}
+}
+
+func TestCommandsAreRegistered(t *testing.T) {
+	setup(t)
+
+	for _, cmd := range provider.Commands() {
+		if cmd.GetSignature() == "{{.Name}}:hello" {
+			return
+		}
+	}
+	t.Fatal("{{.Name}}:hello is not registered")
+}

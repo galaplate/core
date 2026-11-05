@@ -1,0 +1,6 @@
+module {{.ModulePath}}
+
+go {{.GoVersion}}
+{{if .CoreVersion}}
+require github.com/galaplate/core {{.CoreVersion}}
+{{end -}}

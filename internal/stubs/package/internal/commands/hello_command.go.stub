@@ -1,0 +1,20 @@
+package commands
+
+import "fmt"
+
+// HelloCommand is an example console command. Prefix signatures with the
+// package name so they don't clash with the application or other packages.
+type HelloCommand struct{}
+
+func (c *HelloCommand) GetSignature() string {
+	return "{{.Name}}:hello"
+}
+
+func (c *HelloCommand) GetDescription() string {
+	return "Say hello from the {{.Name}} package"
+}
+
+func (c *HelloCommand) Execute(args []string) error {
+	fmt.Println("Hello from {{.ModulePath}}")
+	return nil
+}
