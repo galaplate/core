@@ -8,36 +8,29 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-    
-    strategy:
-      matrix:
-        go-version: ['1.23', '1.24']
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-    
+
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: ${{ matrix.go-version }}
+        go-version-file: go.mod
         cache: true
-    
+
     - name: Download dependencies
       run: go mod download
-    
+
     - name: Verify dependencies
       run: go mod tidy && git diff --exit-code go.mod go.sum
-    
+
     - name: Build
       run: go build ./...
-    
-    - name: Run tests
-      run: go test -v ./...
-    
+
     - name: Run tests with coverage
       run: go test -v -coverprofile=coverage.out ./...
-    
+
     - name: Upload coverage reports
       uses: codecov/codecov-action@v4
       with:
@@ -50,16 +43,16 @@ jobs:
 
   fmt:
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-    
+
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.24'
-    
+        go-version-file: go.mod
+
     - name: Check code formatting
       run: |
         files=$(find . -name '*.go' -type f)
