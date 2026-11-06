@@ -153,20 +153,23 @@ func (m *Manager) setNested(data map[string]any, key string, value any) {
 
 // globalConfigManager is the global config manager instance
 var globalConfigManager *Manager
-var configMutex sync.Once
+var globalConfigOnce sync.Once
 
-// InitializeGlobal initializes the global config manager with data
+// InitializeGlobal loads data into the global config manager, replacing
+// whatever was loaded before. Every call takes effect: the test harness
+// re-bootstraps the app per test, and each bootstrap must see a fresh
+// config rather than values (or mocks) left over from a previous one.
 func InitializeGlobal(data map[string]any) {
-	configMutex.Do(func() {
-		globalConfigManager = NewManager()
-		globalConfigManager.Load(data)
-	})
+	if data == nil {
+		data = make(map[string]any)
+	}
+	GetGlobal().Load(data)
 }
 
 // GetGlobal returns the global config manager
 func GetGlobal() *Manager {
-	if globalConfigManager == nil {
+	globalConfigOnce.Do(func() {
 		globalConfigManager = NewManager()
-	}
+	})
 	return globalConfigManager
 }

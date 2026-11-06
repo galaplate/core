@@ -1,0 +1,42 @@
+// Package {{.PackageName}} is a Galaplate package. Install it in an
+// application with a blank import:
+//
+//	import _ "{{.ModulePath}}"
+package {{.PackageName}}
+
+import (
+	"github.com/galaplate/core/fiber"
+	"github.com/galaplate/core/provider"
+	"{{.ModulePath}}/internal/commands"
+	"{{.ModulePath}}/internal/controllers"
+	_ "{{.ModulePath}}/internal/migrations"
+)
+
+// {{.StructName}} wires the package into the application - Generated on {{.Timestamp}}
+type {{.StructName}} struct{}
+
+func init() { provider.Add(&{{.StructName}}{}) }
+
+// Register runs for every provider before any Boot. Don't resolve
+// middleware aliases here: the application may not have set them yet.
+func (p *{{.StructName}}) Register() {}
+
+// Boot runs after every provider has registered.
+func (p *{{.StructName}}) Boot() {}
+
+// Routes mounts the package's routes after the application's own routes.
+func (p *{{.StructName}}) Routes(app *fiber.App) {
+	group := app.Group("/api/{{.Name}}")
+	group.Get("/ping", controllers.PingControllerInstance.Ping)
+
+	// Use the application's middleware through an alias it registers with
+	// provider.AliasMiddleware:
+	// group.Post("/items", provider.Middleware("auth"), handler)
+}
+
+// Commands registers the package's console commands.
+func (p *{{.StructName}}) Commands() []provider.Command {
+	return []provider.Command{
+		&commands.HelloCommand{},
+	}
+}

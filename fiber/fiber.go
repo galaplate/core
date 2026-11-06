@@ -24,16 +24,16 @@ const (
 	StatusProcessing         = fiber.StatusProcessing
 	StatusEarlyHints         = fiber.StatusEarlyHints
 
-	StatusOK                   = fiber.StatusOK
-	StatusCreated              = fiber.StatusCreated
-	StatusAccepted             = fiber.StatusAccepted
+	StatusOK                          = fiber.StatusOK
+	StatusCreated                     = fiber.StatusCreated
+	StatusAccepted                    = fiber.StatusAccepted
 	StatusNonAuthoritativeInformation = fiber.StatusNonAuthoritativeInformation
-	StatusNoContent            = fiber.StatusNoContent
-	StatusResetContent         = fiber.StatusResetContent
-	StatusPartialContent       = fiber.StatusPartialContent
-	StatusMultiStatus          = fiber.StatusMultiStatus
-	StatusAlreadyReported      = fiber.StatusAlreadyReported
-	StatusIMUsed               = fiber.StatusIMUsed
+	StatusNoContent                   = fiber.StatusNoContent
+	StatusResetContent                = fiber.StatusResetContent
+	StatusPartialContent              = fiber.StatusPartialContent
+	StatusMultiStatus                 = fiber.StatusMultiStatus
+	StatusAlreadyReported             = fiber.StatusAlreadyReported
+	StatusIMUsed                      = fiber.StatusIMUsed
 
 	StatusMultipleChoices   = fiber.StatusMultipleChoices
 	StatusMovedPermanently  = fiber.StatusMovedPermanently

@@ -1,0 +1,7 @@
+// Package migrations holds the package's database migrations. Each one
+// registers itself with database.Register in init(), and provider.go imports
+// this package so they run with the application's `db:up`.
+//
+// Prefix migration names and table names with "{{.TablePrefix}}_" so they can't
+// collide with the application's, e.g. Name: "{{.TablePrefix}}_create_items_table".
+package migrations

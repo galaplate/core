@@ -6,13 +6,13 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strconv"
 	"strings"
 	"text/template"
 
 	"github.com/galaplate/core/config"
 	"github.com/galaplate/core/database"
+	"github.com/galaplate/core/internal/stubs"
 	"github.com/galaplate/core/logger"
 )
 
@@ -347,41 +347,27 @@ func (b *BaseCommand) ShowUsage(commandName, description string, usageExamples [
 	fmt.Println()
 }
 
-// generateFromStub generates a file from an internal stub template
-func (b *BaseCommand) GenerateFromStub(stubPath, targetPath string, data any) error {
-	// Find the project root by looking for go.mod
-	_, currentFile, _, _ := runtime.Caller(0)
-	projectRoot := filepath.Dir(filepath.Dir(currentFile))
-	stubDir := projectRoot + "../../internal/stubs"
-	fullStubPath := filepath.Join(stubDir, stubPath)
-
-	// Try to read from core internal stubs if local doesn't exist
-	if _, err := os.Stat(fullStubPath); os.IsNotExist(err) {
-		// Try to find core stubs
-		coreStubPath := ""
-		possiblePaths := []string{
-			"../core/internal/stubs",
-			"../../core/internal/stubs",
-			"core/internal/stubs",
-		}
-
-		for _, path := range possiblePaths {
-			testPath := filepath.Join(path, stubPath)
-			if _, err := os.Stat(testPath); err == nil {
-				coreStubPath = testPath
-				break
-			}
-		}
-
-		if coreStubPath == "" {
-			return fmt.Errorf("stub template not found: %s", stubPath)
-		}
-		fullStubPath = coreStubPath
+// readStub returns the content of an internal stub template. Stubs are
+// embedded in core, so this works whether core comes from a sibling checkout,
+// the module cache or a vendor directory. A local ./internal/stubs copy, when
+// present, takes precedence so stubs can be overridden per project.
+func (b *BaseCommand) readStub(stubPath string) ([]byte, error) {
+	if content, err := os.ReadFile(filepath.Join("internal", "stubs", stubPath)); err == nil {
+		return content, nil
 	}
 
-	stubContent, err := os.ReadFile(fullStubPath)
+	content, err := stubs.FS.ReadFile(filepath.ToSlash(stubPath))
 	if err != nil {
-		return fmt.Errorf("failed to read stub template: %v", err)
+		return nil, fmt.Errorf("stub template not found: %s", stubPath)
+	}
+	return content, nil
+}
+
+// GenerateFromStub generates a file from an internal stub template
+func (b *BaseCommand) GenerateFromStub(stubPath, targetPath string, data any) error {
+	stubContent, err := b.readStub(stubPath)
+	if err != nil {
+		return err
 	}
 
 	tmpl, err := template.New("stub").Parse(string(stubContent))
@@ -409,37 +395,9 @@ func (b *BaseCommand) GenerateFromStub(stubPath, targetPath string, data any) er
 
 // CopyStubToTarget copies a stub file to target location without template processing
 func (b *BaseCommand) CopyStubToTarget(stubPath, targetPath string) error {
-	// Get the stub content from embedded stubs or file system
-	stubDir := "./internal/stubs"
-	fullStubPath := filepath.Join(stubDir, stubPath)
-
-	// Try to read from core internal stubs if local doesn't exist
-	if _, err := os.Stat(fullStubPath); os.IsNotExist(err) {
-		// Try to find core stubs
-		coreStubPath := ""
-		possiblePaths := []string{
-			"../core/internal/stubs",
-			"../../core/internal/stubs",
-			"core/internal/stubs",
-		}
-
-		for _, path := range possiblePaths {
-			testPath := filepath.Join(path, stubPath)
-			if _, err := os.Stat(testPath); err == nil {
-				coreStubPath = testPath
-				break
-			}
-		}
-
-		if coreStubPath == "" {
-			return fmt.Errorf("stub file not found: %s", stubPath)
-		}
-		fullStubPath = coreStubPath
-	}
-
-	stubContent, err := os.ReadFile(fullStubPath)
+	stubContent, err := b.readStub(stubPath)
 	if err != nil {
-		return fmt.Errorf("failed to read stub file: %v", err)
+		return err
 	}
 
 	// Create target directory if it doesn't exist

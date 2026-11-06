@@ -42,6 +42,8 @@ func (k *Kernel) registerDefaultCommands() {
 	k.Register(&commands.MakeCronCommand{})
 	k.Register(&commands.MakeSeederCommand{})
 	k.Register(&commands.MakeFactoryCommand{})
+	k.Register(&commands.MakeProviderCommand{})
+	k.Register(&commands.MakePackageCommand{})
 
 	// Database commands
 	k.Register(&commands.DbCreateCommand{})

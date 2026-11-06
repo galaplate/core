@@ -1,0 +1,14 @@
+package controllers
+
+import "github.com/galaplate/core/fiber"
+
+type PingController struct{}
+
+var PingControllerInstance = &PingController{}
+
+func (c *PingController) Ping(ctx fiber.Ctx) error {
+	return ctx.JSON(fiber.Map{
+		"package": "{{.Name}}",
+		"status":  "ok",
+	})
+}

@@ -1,0 +1,6 @@
+default: sqlite
+
+connections:
+  sqlite:
+    driver: sqlite
+    database: ${DB_SQLITE_PATH:./storage/test.db}

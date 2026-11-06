@@ -1,0 +1,35 @@
+package providers
+
+import (
+{{- if .WithRoutes}}
+	"github.com/galaplate/core/fiber"
+{{- end}}
+	"github.com/galaplate/core/provider"
+)
+
+// {{.StructName}} - Generated on {{.Timestamp}}
+type {{.StructName}} struct{}
+
+func init() { provider.Add(&{{.StructName}}{}) }
+
+// Register runs for every provider before any Boot. Bind things other
+// providers need here, such as middleware aliases.
+func (p *{{.StructName}}) Register() {}
+
+// Boot runs after every provider has registered.
+func (p *{{.StructName}}) Boot() {}
+{{- if .WithRoutes}}
+
+// Routes mounts this provider's routes after the application's own routes.
+func (p *{{.StructName}}) Routes(app *fiber.App) {
+	// group := app.Group("/api/{{.RoutePrefix}}", provider.Middleware("auth"))
+	// group.Get("/", handler)
+}
+{{- end}}
+{{- if .WithCommands}}
+
+// Commands registers console commands.
+func (p *{{.StructName}}) Commands() []provider.Command {
+	return []provider.Command{}
+}
+{{- end}}
